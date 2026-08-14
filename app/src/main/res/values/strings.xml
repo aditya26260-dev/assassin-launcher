@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Assassin Launcher</string>
+    <string name="game_session_notification_title">Minecraft is running</string>
+    <string name="game_session_notification_text">Tap to return to the game</string>
+</resources>

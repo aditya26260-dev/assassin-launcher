@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "710, 720 & 722 v3.3",
+  "description": "Turnip driver for Adreno 710/720/722",
+  "author": "vauzi",
+  "packageVersion": "1",
+  "vendor": "Mesa",
+  "driverVersion": "Mesa 26.3.0 Vulkan 1.4.354",
+  "minApi": 28,
+  "libraryName": "libvulkan_freedreno.so"
+}

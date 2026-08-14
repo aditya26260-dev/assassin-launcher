@@ -1,0 +1,53 @@
+name: Build debug APK
+
+# Runs on every push so a real compile happens automatically - this
+# project has never been built before, only written and manually
+# reviewed, so the first few runs here are expected to surface real
+# errors. That's the point of having this at all.
+on:
+  push:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # GitHub's runners already have an Android SDK preinstalled with
+      # recent platforms/build-tools, which covers almost everything.
+      # The NDK version below must match app/build.gradle.kts's
+      # ndkVersion if that's ever pinned explicitly - if the build fails
+      # on a missing NDK component, that's the first thing to check.
+      - name: Install NDK
+        run: sdkmanager --install "ndk;27.0.12077973"
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assassin-launcher-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-logs
+          path: |
+            **/build/reports/**
+            **/build/outputs/logs/**
+          if-no-files-found: ignore
