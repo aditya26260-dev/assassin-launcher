@@ -1198,6 +1198,42 @@ following `egl_bridge.c`'s confirmed real mechanism, and
 downloading remains untouched and independent of all of this - still a
 real, separate piece of work whenever it's picked up.
 
+## First real CI run - and the first real, compiler-confirmed bug
+
+Aditya set up the repo and pushed via the Termux/`gh` steps in
+docs/BUILDING.md and sent back the failure logs directly. First real
+external confirmation this project has ever gotten, and it found
+something in one message that a lot more manual review wouldn't have:
+the workflow itself was broken, not the app code.
+
+**Root cause, read directly from the log, not guessed**: `sdkmanager:
+command not found`, exit 127, at the "Install NDK" step. GitHub's
+`ubuntu-latest` runners do ship a preinstalled Android SDK, but
+`sdkmanager` isn't on `PATH` in a plain shell step - the workflow assumed
+it would be. Confirmed the real fix rather than guessing a path that
+could shift with future runner-image updates: switched to
+`nttld/setup-ndk`, a small, widely-used action built specifically for
+this, with `link-to-sdk: true` so Gradle sees it correctly. Checked its
+real README directly for the exact usage rather than trusting a search
+snippet.
+
+Also bumped `actions/checkout` and `actions/setup-java` to v5 - the same
+log carried an explicit deprecation warning for both at v4, cheap to fix
+while already in the file.
+
+Nothing else in the run points to a problem - checkout and JDK setup both
+succeeded cleanly before the NDK step. The actual `./gradlew
+assembleDebug` step has still never run even once; this fix should get
+the workflow to it for the first time.
+
+## Next action
+Aditya re-syncs (unzip the new project state over the existing folder,
+`git add . && git commit -m "Fix CI NDK step" && git push`) and checks
+the Actions tab again. If it reaches the actual Gradle build step this
+time, whatever it reports - green or red - will be the most real signal
+this project has had yet. A red result at that point would be genuinely
+useful too: real compiler/Gradle errors, not more speculation about them.
+
 ## CI added; binary-extraction plan for the LWJGL native gap
 
 Aditya asked directly about timeline, about writing an Android-native

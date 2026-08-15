@@ -12,21 +12,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      # GitHub's runners already have an Android SDK preinstalled with
-      # recent platforms/build-tools, which covers almost everything.
-      # The NDK version below must match app/build.gradle.kts's
-      # ndkVersion if that's ever pinned explicitly - if the build fails
-      # on a missing NDK component, that's the first thing to check.
+      # GitHub's runners already have an Android SDK preinstalled, but
+      # sdkmanager isn't on PATH in a plain shell step (confirmed by an
+      # actual failed run: "sdkmanager: command not found", exit 127 -
+      # not guessed). nttld/setup-ndk downloads/caches the NDK directly
+      # and links it into the SDK Gradle already sees, sidestepping the
+      # PATH problem and any future runner-image path changes.
       - name: Install NDK
-        run: sdkmanager --install "ndk;27.0.12077973"
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27d
+          link-to-sdk: true
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
