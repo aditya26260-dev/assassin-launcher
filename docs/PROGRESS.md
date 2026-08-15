@@ -1272,6 +1272,49 @@ expect this gets past `./gradlew` actually running for the first time.
 Whether the real Gradle/Kotlin compile behind it succeeds on the first
 try is a separate question this hasn't tested yet.
 
+## Third real CI run - first actual project-configuration error
+
+Wrapper fix worked - Gradle 9.5.1 downloaded, started a daemon, and got
+all the way into configuring the `:app` module for the first time ever.
+New failure, again read directly from the log rather than guessed at:
+
+> Starting in Kotlin 2.0, the Compose Compiler Gradle plugin is required
+> when compose is enabled.
+
+**Real root cause**: this project's `buildFeatures { compose = true }`
+has always been there, but the separate Compose compiler Gradle plugin
+that Kotlin 2.0+ requires alongside it never was - genuinely never
+needed to surface before now, since nothing had compiled far enough to
+reach the point that checks for it.
+
+One thing worth being precise about since it looks related but isn't: the
+root `build.gradle.kts` comment about AGP 9.x's built-in Kotlin support
+(no separate `org.jetbrains.kotlin.android` plugin needed) is *correct*,
+confirmed directly against AGP's own release notes rather than doubted
+just because a Kotlin-adjacent error showed up near it. The Compose
+compiler is a genuinely separate requirement from general Kotlin
+compilation - AGP 9.0+ bundles the Kotlin compiler itself, but not the
+Compose-specific one.
+
+**Fix**: added `org.jetbrains.kotlin.plugin.compose` at version `2.2.10`
+- confirmed, not guessed, as the exact Kotlin version AGP 9.1.1 bundles
+internally (cross-checked against two independent sources, since a
+mismatched version here is a well-known separate failure mode: the
+Compose compiler plugin must match the Kotlin version exactly, the same
+kind of exact-match requirement already seen with LWJGL-to-Minecraft-
+version pairing elsewhere in this project). No `libs.versions.toml`
+catalog in this project, so applied directly by id/version, matching the
+style already used for AGP rather than introducing a new pattern as a
+side effect of this fix.
+
+## Next action
+Re-sync and push again. Nothing else in this run's log points to a
+second issue - the failure was purely at project configuration, before
+any actual Kotlin source file was touched. If this clears it, the *next*
+run is the first one with a real chance of reaching actual compilation of
+this project's own code - the real test all of the above was leading up
+to.
+
 ## CI added; binary-extraction plan for the LWJGL native gap
 
 Aditya asked directly about timeline, about writing an Android-native
