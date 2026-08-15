@@ -1392,6 +1392,33 @@ anything's still wrong, it'll be something neither this project's history
 nor the six reference codebases already surfaced - genuinely new
 information either way.
 
+## Fifth real CI run - a self-inflicted mistake, not a new project issue
+
+Every single error in this run - dozens of "Expecting a top level
+declaration" - traced to one place: `KryptonWrapperManager.kt`, lines
+6-10. Real cause, found immediately by reading the actual file rather
+than the error text alone: the `NativeBridge` import fix from two
+sessions ago dropped the `/**` opening and its first line when adding
+the import - the old text being replaced included them, the replacement
+text didn't, so they were deleted rather than preserved. A self-inflicted
+mistake in this project's own edit, not a new problem in the underlying
+code.
+
+Checked the other two files touched in that same earlier edit
+(`MobileGluesManager.kt`, `TurnipDriverManager.kt`) - both correct,
+this didn't repeat. Swept the whole project afterward for the same
+pattern (an orphaned `* comment continuation` line with no `/**` opener
+before it) to make sure nothing else from past sessions has the same
+issue sitting undetected - clean, nothing else found.
+
+Worth being direct about: every fix from the previous round held up.
+Nothing about the IconButton imports, the Row/Column parameter fixes,
+the OptIn annotations, or the OpenNBT vendoring produced a new error in
+this run - the entire error list was this one thing.
+
+## Next action
+Re-sync and push again.
+
 ## CI added; binary-extraction plan for the LWJGL native gap
 
 Aditya asked directly about timeline, about writing an Android-native
