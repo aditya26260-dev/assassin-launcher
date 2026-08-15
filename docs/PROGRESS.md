@@ -1419,6 +1419,38 @@ this run - the entire error list was this one thing.
 ## Next action
 Re-sync and push again.
 
+## Sixth real CI run - Kotlin compiles clean; native code, for the first
+## time, actually started building
+
+Real, worth stating plainly: `compileDebugKotlin` succeeded this time -
+zero errors, only five pre-existing `Divider`-to-`HorizontalDivider`
+deprecation warnings (harmless, not addressed - out of scope for a
+build-fixing pass, nothing currently breaks because of them). Every
+Kotlin fix across the last several rounds held. The build got further
+than ever before: past Kotlin entirely and into `buildCMakeDebug`, this
+project's native C++ compiling for the first real time.
+
+Three of four of this project's own native files
+(`adreno_driver_bridge.cpp`, `egl_loader_bridge.cpp`, `native_bridge.cpp`)
+and the entire vendored libadrenotools subproject compiled clean (a
+handful of pre-existing warnings in libadrenotools itself - missing
+designated-initializer fields, a snprintf truncation note - real, but
+third-party vendored code already working elsewhere, not this session's
+job to patch).
+
+**One real, simple error**: `jvm_launcher_bridge.cpp:42:5: error: use of
+undeclared identifier '_exit'`. The SIGABRT handler calls `_exit(134)`,
+declared in `<unistd.h>` - which the file never included. Added the
+missing include. One line, confirmed as the sole error in the whole
+native build.
+
+## Next action
+Re-sync and push. Native code compiling at all - even failing on one
+missing header rather than something structural - is a real, positive
+signal for everything built the JLI_Launch bridge on top of: the C++
+itself is fundamentally sound, this was a one-line oversight, not a
+deeper problem with the approach.
+
 ## CI added; binary-extraction plan for the LWJGL native gap
 
 Aditya asked directly about timeline, about writing an Android-native

@@ -3,6 +3,7 @@
 #include <csignal>
 #include <cstring>
 #include <cstdlib>
+#include <unistd.h>
 #include <vector>
 #include <android/log.h>
 
