@@ -78,7 +78,11 @@ Full detail and sources for all of the above: `docs/PHASE0_RESEARCH.md`.
   relicense not yet reflected there - either way, safe as a dependency
   regardless of this project's own license). Real read/write of
   Minecraft's actual servers.dat format, confirmed as the same library
-  Zalith Launcher 2 uses.
+  Zalith Launcher 2 uses. Vendored at `app/libs/opennbt-1.6.jar` rather
+  than a Maven dependency - the nominally-published Maven Central
+  coordinate didn't actually resolve on a real build, and Zalith
+  Launcher 2 itself vendors the same jar rather than depending on it
+  remotely, which isn't a coincidence.
 - Apache Commons Compress — Apache License 2.0. Real tar.xz extraction for
   provisioned JVMs, same library Amethyst Launcher's own code uses.
 - org.tukaani:xz — public domain. Commons Compress's underlying XZ codec,

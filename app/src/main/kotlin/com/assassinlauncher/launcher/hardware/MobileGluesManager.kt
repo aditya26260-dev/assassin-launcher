@@ -1,6 +1,7 @@
 package com.assassinlauncher.launcher.hardware
 
 import android.content.Context
+import com.assassinlauncher.launcher.nativebridge.NativeBridge
 import java.io.File
 
 /**

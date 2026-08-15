@@ -1,3 +1,9 @@
+// ExposedDropdownMenuBox/ExposedDropdownMenuDefaults are still
+// @ExperimentalMaterial3Api in this Compose BOM - real opt-in, not a
+// suppressed warning, since there's no stable non-experimental
+// equivalent yet for this specific component.
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.assassinlauncher.launcher.home
 
 import androidx.compose.foundation.layout.Arrangement

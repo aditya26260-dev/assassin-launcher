@@ -1,10 +1,8 @@
 package com.assassinlauncher.launcher.hardware
 
 import android.content.Context
+import com.assassinlauncher.launcher.nativebridge.NativeBridge
 import java.io.File
-
-/**
- * Same confirmed pattern as MobileGluesManager (standard dlopen, no
  * linker namespace bypass needed) - Krypton Wrapper is GL4ES-family, same
  * lineage, same EGL-substitution mechanism confirmed in Amethyst's actual
  * source (the exact library name below, libng_gl4es.so, matched what's in

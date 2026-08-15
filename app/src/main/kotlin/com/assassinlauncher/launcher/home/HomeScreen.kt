@@ -1,16 +1,13 @@
 package com.assassinlauncher.launcher.home
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IconButton
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -21,6 +18,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,7 +60,7 @@ fun HomeScreen(
                     modifier = Modifier.align(Alignment.TopStart),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    Row(verticalArrangement = Arrangement.Center) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onManageAccountsClick) {
                             Icon(
                                 imageVector = Icons.Filled.AccountCircle,
@@ -98,7 +96,7 @@ fun HomeScreen(
                 // beside it.
                 Row(
                     modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 24.dp),
-                    verticalArrangement = Arrangement.Center
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     FloatingActionButton(
                         onClick = onPlayClick,

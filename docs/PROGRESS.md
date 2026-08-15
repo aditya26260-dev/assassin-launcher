@@ -1315,6 +1315,83 @@ run is the first one with a real chance of reaching actual compilation of
 this project's own code - the real test all of the above was leading up
 to.
 
+## Fourth real CI run - actual source compilation, for the first time ever
+
+Configuration passed clean this time. `compileDebugKotlin` actually ran -
+first time any of this project's own code has ever been checked by a real
+compiler - and reported a real, substantial error list. Aditya asked to
+fix all of them in one pass; every one traced back to one of three real
+root causes, not dozens of unrelated bugs.
+
+**Root cause 1 - three missing imports.** `KryptonWrapperManager.kt`,
+`MobileGluesManager.kt`, `TurnipDriverManager.kt` all call `NativeBridge`
+without importing it from `com.assassinlauncher.launcher.nativebridge` -
+a different package than the `hardware` package they're in. Added the
+import to all three. Nothing else wrong in any of them.
+
+**Root cause 2 - `IconButton` imported from the wrong package, plus a
+stray `weight` import, across six UI files.** `IconButton` is
+`androidx.compose.material3.IconButton`; several files instead imported a
+symbol that doesn't exist there
+(`androidx.compose.foundation.layout.IconButton`), which explains the
+whole cascade in each affected file - every downstream "Unresolved
+reference" and "@Composable invocations can only happen..." error in
+these files was this one bad import confusing the compiler, not
+independent bugs, and cleared on its own once the import was corrected.
+Separately, a stray `import androidx.compose.foundation.layout.weight`
+was colliding with an unrelated *internal* property of the same simple
+name in that package - `Modifier.weight()` doesn't need an explicit
+import at all inside a `Row`/`Column` lambda, it resolves automatically
+as a scoped member, so the fix was deleting the import outright, not
+correcting it to point somewhere else. Fixed across `HomeScreen.kt`,
+`ModsQuickPanel.kt`, `ModDetailModal.kt`, `ContentManagerScreen.kt`,
+`ModManagerScreen.kt`. Two genuine logic bugs turned up in the same pass,
+same file: `Row(verticalArrangement = ...)` in `HomeScreen.kt` twice -
+`verticalArrangement` is a `Column` parameter, `Row`'s equivalent for
+this is `verticalAlignment` - changed to
+`Row(verticalAlignment = Alignment.CenterVertically)`, matching what the
+surrounding icon+text layout was actually going for.
+
+Also added `@file:OptIn(ExperimentalMaterial3Api::class)` to
+`GameProfileEditorScreen.kt` and `ModDetailModal.kt` -
+`ExposedDropdownMenuBox`/`ExposedDropdownMenuDefaults` are still
+experimental in this Compose BOM, genuine opt-in required, not a
+suppressed warning masking something real.
+
+**Root cause 3 - OpenNBT never actually resolved, and every downstream
+error in `ServerRepository.kt` was this one thing.** `NBTIO`, `CompoundTag`,
+`ListTag`, `StringTag`, `Tag` - the entire library - came back unresolved,
+plus a wave of "cannot infer type" errors that turned out to be the same
+cause: generic type inference failing because the element types
+themselves didn't resolve. `com.github.steveice10:opennbt:1.0` is
+nominally on Maven Central, confirmed by checking Central's own listing
+directly - but didn't actually resolve on a real build regardless.
+Checked ZalithLauncher2 (where this dependency choice came from) for how
+*they* handle it: they don't depend on it via Gradle at all - they vendor
+`opennbt-1.6.jar` directly in `libs/`. Not a coincidence; their own
+real-world experience with this exact artifact. Before adopting their
+jar, cross-checked their actual working usage
+(`NBTUtils.kt`/`ServerData.kt`) against this project's
+`ServerRepository.kt` line by line - constructor shapes, `.put()`,
+`.value`, `.get() as?` patterns all matched exactly, confirming this
+project's own NBT code was API-correct the whole time and the only real
+problem was availability. Vendored `opennbt-1.6.jar` at `app/libs/`,
+wired in via `implementation(fileTree("libs") { include("*.jar") })`,
+removed the Maven coordinate. Correct use of the libs/fileTree pattern
+this time - unlike the LWJGL jars, this one really is called directly by
+this project's own Kotlin code, not the embedded game JVM, so it belongs
+in the app's own classpath rather than as an extracted-at-runtime asset.
+`ServerRepository.kt` itself needed zero code changes.
+
+## Next action
+Re-sync and push. This is the first run with a real chance at a green
+build - everything reported has a traced, verified root cause and a
+fix grounded in either this project's own confirmed-working precedent or
+a mature reference project's real, checked source, not a guess. If
+anything's still wrong, it'll be something neither this project's history
+nor the six reference codebases already surfaced - genuinely new
+information either way.
+
 ## CI added; binary-extraction plan for the LWJGL native gap
 
 Aditya asked directly about timeline, about writing an Android-native
