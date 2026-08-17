@@ -47,10 +47,25 @@ actual requirements, not folded in silently.
   storage at launch time, same pattern as the MobileGlues/Krypton/Turnip
   binaries below - these are loaded by the embedded game JVM, not by our
   own Kotlin code, so they're bundled as assets rather than a Gradle
-  dependency). The native `.so` counterpart these jars call into
-  (Amethyst's own build depends on the SDL2/sdl2-compat git submodules,
-  not included in a plain source zip) is a real, open gap - see
-  docs/PROGRESS.md.
+  dependency). The native `.so` files (liblwjgl.so and the per-module
+  natives) were a real, open gap for three sessions - Amethyst's own
+  source repo depends on SDL2/sdl2-compat git submodules a plain zip
+  export doesn't include. Closed by extracting the real, compiled
+  binaries directly from Amethyst's own released `Amethyst.apk` (an APK
+  is just a zip; verified by inspecting its actual contents, not assumed
+  from the filename - a real mistake earlier in this same session,
+  corrected before anything shipped). The jar set was updated at the
+  same time to match the APK's real shipped combination, which merges
+  the glfw+opengl modules into one `lwjgl-3.3.3-merged-modules.jar`
+  rather than the separate per-module jars the source repo's dev-time
+  files have.
+- **OpenAL (Amethyst's build)** — bundled at
+  `app/src/main/jniLibs/arm64-v8a/libopenal.so`, same source and same
+  verification as the LWJGL natives above. OpenAL itself is a permissive
+  license (LGPL for the reference implementation historically, though
+  Amethyst's specific build's exact license wasn't independently
+  re-verified beyond confirming the binary's real origin - worth a closer
+  look if this project ever tightens its own license auditing further).
 - **ANGLE** — BSD-3-Clause, confirmed directly at Google's own repo (an
   earlier pass had this flagged as unresolved over a conflicting "All
   Rights Reserved" credit on one of the reference projects' own pages —

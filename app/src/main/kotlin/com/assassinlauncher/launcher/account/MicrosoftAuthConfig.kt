@@ -7,11 +7,16 @@ object MicrosoftAuthConfig {
     const val CLIENT_ID = "1bb23364-a504-4974-9e60-4c71dbbca67a"
 
     // The "no server needed" redirect Microsoft provides specifically for
-    // native/public clients - confirmed current via Microsoft's own docs
-    // and cross-checked against a real launcher's own working setup.
-    // This needs to be registered in the Azure app under Authentication ->
-    // Add a platform -> Web, with this exact URI - not done automatically,
-    // needs the user to add it.
+    // native/public clients - confirmed current via Microsoft's own docs.
+    // Must be registered in the Azure app under Authentication -> Add a
+    // platform -> "Mobile and desktop applications" (not "Web" - a
+    // previous version of this comment said Web, which is wrong and
+    // would cause exactly the 401 a real sign-in attempt just hit:
+    // Azure treats Web-platform redirect URIs as needing a client
+    // secret, which a public/native client correctly never sends).
+    // "Allow public client flows" also needs to be set to Yes under
+    // Authentication -> Advanced settings - a separate, additional
+    // requirement, confirmed against Microsoft's own docs, not assumed.
     const val REDIRECT_URI = "https://login.microsoftonline.com/common/oauth2/nativeclient"
 
     // "consumers" specifically, not "common" or a tenant ID - confirmed in

@@ -1,12 +1,19 @@
 package com.assassinlauncher.launcher
 
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,9 +56,32 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Real edge-to-edge, not just the status/nav bar transparency
+        // enableEdgeToEdge() covers on its own - a display cutout
+        // (notch/punch-hole) needs its own separate flag or content
+        // still gets letterboxed around it. LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        // is API 30+; SHORT_EDGES is the correct fallback down to API 28,
+        // and cutout handling doesn't exist at all below that, so this is
+        // a real minSdk-aware branch, not an oversight.
+        enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
         setContent {
             AssassinLauncherTheme {
-                AppRoot(instanceRepository, accountRepository)
+                // Single centralized fix for every screen at once: the
+                // background (each screen's own Surface) now correctly
+                // extends fully edge-to-edge including under the notch,
+                // while actual content stays clear of the status bar,
+                // notch, and nav bar via this one shared inset padding -
+                // not something each screen needs to handle individually.
+                Box(modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    AppRoot(instanceRepository, accountRepository)
+                }
             }
         }
     }
@@ -108,57 +138,82 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
             val device = deviceProfile
             when {
                 profile == null || device == null -> LoadingPlaceholder()
-                screen is Screen.LaunchPreview -> LaunchPreviewScreen(
-                    profile = profile,
-                    device = device,
-                    onBack = { screen = Screen.Home }
-                )
-                screen is Screen.EditProfile -> GameProfileEditorScreen(
-                    profile = profile,
-                    onSave = { updated ->
-                        activeProfile = updated
-                        coroutineScope.launch { instanceRepository.saveProfile(updated) }
-                    },
-                    onBack = { screen = Screen.Home }
-                )
-                screen is Screen.Settings -> SettingsScreen(
-                    device = device,
-                    onBack = { screen = Screen.Home }
-                )
-                screen is Screen.ModManager -> ModManagerScreen(
-                    profile = profile,
-                    onBack = {
+                screen is Screen.LaunchPreview -> {
+                    BackHandler { screen = Screen.Home }
+                    LaunchPreviewScreen(
+                        profile = profile,
+                        device = device,
+                        onBack = { screen = Screen.Home }
+                    )
+                }
+                screen is Screen.EditProfile -> {
+                    BackHandler { screen = Screen.Home }
+                    GameProfileEditorScreen(
+                        profile = profile,
+                        onSave = { updated ->
+                            activeProfile = updated
+                            coroutineScope.launch { instanceRepository.saveProfile(updated) }
+                        },
+                        onBack = { screen = Screen.Home }
+                    )
+                }
+                screen is Screen.Settings -> {
+                    BackHandler { screen = Screen.Home }
+                    SettingsScreen(
+                        device = device,
+                        onBack = { screen = Screen.Home }
+                    )
+                }
+                screen is Screen.ModManager -> {
+                    val backToHome = {
                         screen = Screen.Home
                         rescanMods(profile.id)
-                    },
-                    onOpenResourcePacks = { screen = Screen.ResourcePacks },
-                    onOpenShaders = { screen = Screen.Shaders },
-                    onOpenServers = { screen = Screen.Servers }
-                )
-                screen is Screen.ResourcePacks -> ContentManagerScreen(
-                    profile = profile,
-                    contentType = ModrinthContentType.RESOURCE_PACK,
-                    onBack = { screen = Screen.ModManager }
-                )
-                screen is Screen.Shaders -> ContentManagerScreen(
-                    profile = profile,
-                    contentType = ModrinthContentType.SHADER,
-                    onBack = { screen = Screen.ModManager }
-                )
-                screen is Screen.Servers -> ServerManagerScreen(
-                    profileId = profile.id,
-                    onBack = { screen = Screen.ModManager }
-                )
-                screen is Screen.MicrosoftSignIn -> MicrosoftSignInScreen(
-                    onResult = { result ->
-                        accountRepository.addOrUpdateMicrosoftAccount(
-                            result.result.profile,
-                            result.result.minecraftSession
-                        )
-                        screen = Screen.Home
-                    },
-                    onCancel = { screen = Screen.Home }
-                )
+                    }
+                    BackHandler(onBack = backToHome)
+                    ModManagerScreen(
+                        profile = profile,
+                        onBack = backToHome,
+                        onOpenResourcePacks = { screen = Screen.ResourcePacks },
+                        onOpenShaders = { screen = Screen.Shaders },
+                        onOpenServers = { screen = Screen.Servers }
+                    )
+                }
+                screen is Screen.ResourcePacks -> {
+                    BackHandler { screen = Screen.ModManager }
+                    ContentManagerScreen(
+                        profile = profile,
+                        contentType = ModrinthContentType.RESOURCE_PACK,
+                        onBack = { screen = Screen.ModManager }
+                    )
+                }
+                screen is Screen.Shaders -> {
+                    BackHandler { screen = Screen.ModManager }
+                    ContentManagerScreen(
+                        profile = profile,
+                        contentType = ModrinthContentType.SHADER,
+                        onBack = { screen = Screen.ModManager }
+                    )
+                }
+                screen is Screen.Servers -> {
+                    BackHandler { screen = Screen.ModManager }
+                    ServerManagerScreen(
+                        profileId = profile.id,
+                        onBack = { screen = Screen.ModManager }
+                    )
+                }
+                screen is Screen.MicrosoftSignIn -> {
+                    BackHandler { screen = Screen.Home }
+                    MicrosoftSignInScreen(
+                        onResult = { result ->
+                            accountRepository.addOrUpdateMicrosoftAccount(
+                                result.result.profile,
+                                result.result.minecraftSession
+                            )
+                            screen = Screen.Home
+                        },
+                        onCancel = { screen = Screen.Home }
+                    )
+                }
                 else -> HomeScreen(
                     activeAccount = accountRepository.activeAccount(),
                     activeProfile = profile,

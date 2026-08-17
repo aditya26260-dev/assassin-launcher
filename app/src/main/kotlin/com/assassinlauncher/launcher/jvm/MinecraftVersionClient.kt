@@ -13,6 +13,22 @@ data class MinecraftLibrary(val name: String, val downloadUrl: String, val path:
 
 data class ClientJar(val downloadUrl: String, val sha1: String)
 
+/** One entry in an asset index's "objects" map - the key (not modeled
+ * here, kept as the map key in AssetIndex) is the asset's logical path
+ * (e.g. "minecraft/sounds/random/click.ogg"); hash is what actually
+ * determines where it lives in objects/ and what URL serves it. */
+data class AssetObject(val hash: String, val size: Long)
+
+/** An asset index's full contents, not just its URL - fetched
+ * separately from version details since it's a whole additional
+ * document, often the single largest fetch in the entire launch
+ * sequence for modern versions (thousands of entries). "isVirtual"
+ * marks pre-1.7 indexes, which need their objects also copied out to
+ * assetsDir/virtual/legacy/<path> using the real path rather than the
+ * hash-named layout modern versions read directly - old Minecraft
+ * doesn't know how to look assets up by hash at all. */
+data class AssetIndex(val id: String, val isVirtual: Boolean, val objects: Map<String, AssetObject>)
+
 /** One entry from the modern (1.13+) arguments.game or arguments.jvm
  * array. Either unconditional (rules == null, every plain-string entry
  * takes this form) or gated behind rules that VersionRuleEvaluator
@@ -145,6 +161,26 @@ class MinecraftVersionClient {
             }
         }
     }
+
+    /** The asset index's actual content - fetchVersionDetails only ever
+     * captured its URL. A separate fetch because it's a genuinely
+     * separate document, not part of the per-version manifest itself.
+     * `id` is passed in rather than parsed - Mojang's index JSON doesn't
+     * self-report one, it's only known from the version manifest's
+     * separate "assets" short-name field the caller already has. */
+    suspend fun fetchAssetIndex(id: String, url: String): Result<AssetIndex> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val request = Request.Builder().url(url).build()
+                val json = JSONObject(executeForBody(request))
+                val objectsJson = json.getJSONObject("objects")
+                val objects = objectsJson.keys().asSequence().associateWith { path ->
+                    val entry = objectsJson.getJSONObject(path)
+                    AssetObject(hash = entry.getString("hash"), size = entry.getLong("size"))
+                }
+                AssetIndex(id = id, isVirtual = json.optBoolean("virtual", false), objects = objects)
+            }
+        }
 
     private fun executeForBody(request: Request): String {
         client.newCall(request).execute().use { response ->

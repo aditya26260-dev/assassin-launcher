@@ -1,5 +1,6 @@
 package com.assassinlauncher.launcher.launch
 
+import android.app.ActivityManager
 import android.content.Context
 import android.system.Os
 import com.assassinlauncher.launcher.account.AccountRepository
@@ -157,6 +158,7 @@ class GameLaunchOrchestrator(private val context: Context) {
             )
         }
         val lwjglJarFiles = lwjglProvider.classpathJarPaths().map(::File)
+        lwjglProvider.ensureNatives()
         val classpath = libraryDownloader.buildClasspath(libraryFiles + lwjglJarFiles, clientJarFile)
 
         emit(LaunchOutcome.Progress(LaunchStage.PreparingRenderer))
@@ -200,10 +202,11 @@ class GameLaunchOrchestrator(private val context: Context) {
 
         val jvmArgs = GameArgumentBuilder.buildJvmArgs(details, substitutions, activeFeatures)
         val gameArgs = GameArgumentBuilder.buildGameArgs(details, substitutions, activeFeatures)
-        val ramArgs = listOf("-Xms512M", "-Xmx${profile.ramAllocationMb ?: DEFAULT_RAM_MB}M")
+        val ramArgs = listOf("-Xms512M", "-Xmx${profile.ramAllocationMb ?: defaultRamMb()}M")
         val userJvmArgs = profile.jvmArgsOverride?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
+        val lwjglNativeArgs = lwjglNativeArgs(lwjglProvider.nativesDir)
 
-        val fullArgs = listOf("java") + ramArgs + userJvmArgs + jvmArgs +
+        val fullArgs = listOf("java") + ramArgs + userJvmArgs + jvmArgs + lwjglNativeArgs +
             listOf(details.mainClass) + gameArgs
 
         emit(LaunchOutcome.Progress(LaunchStage.StartingJvm))
@@ -235,6 +238,27 @@ class GameLaunchOrchestrator(private val context: Context) {
             )
         )
     }.flowOn(Dispatchers.IO)
+
+    /** LWJGL's own SharedLibraryLoader normally auto-extracts natives
+     * bundled as jar resources - not how they're provisioned here
+     * (extracted loose files instead, see AndroidLwjglProvider).
+     * `-Djava.library.path` already points at nativesDir via the
+     * standard `natives_directory` substitution in GameArgumentBuilder,
+     * which is enough on its own for LWJGL's default resolution
+     * (System.loadLibrary-style: "lwjgl" -> liblwjgl.so) to find these -
+     * every filename here is the LWJGL build's own real, unmodified
+     * output name, so no per-module rename is needed. Deliberately not
+     * adding individual -Dorg.lwjgl.<module>.libname= overrides for
+     * every module: confirmed real for a few specific ones from
+     * Amethyst's actual JREUtils.java (opengl, freetype, vulkan, spvc),
+     * not confirmed for the rest, and getting a property name wrong is
+     * worse than leaving the well-documented java.library.path fallback
+     * to do its job. SharedLibraryExtractPath is the one addition beyond
+     * that - LWJGL's own documented "if you do need to extract
+     * something, extract it here" setting, safe to set regardless of
+     * whether it ends up used. */
+    private fun lwjglNativeArgs(nativesDir: File): List<String> =
+        listOf("-Dorg.lwjgl.system.SharedLibraryExtractPath=${nativesDir.absolutePath}")
 
     private fun resolveJavaRuntime(profile: GameProfile, details: MinecraftVersionDetails): JavaRuntimeVersion {
         profile.javaRuntimeOverride
@@ -360,7 +384,21 @@ class GameLaunchOrchestrator(private val context: Context) {
     private fun jdkVersionStrings(runtime: JavaRuntimeVersion): Pair<String, String> =
         "${runtime.majorVersion}.0-internal" to "${runtime.majorVersion}"
 
+    /** Half the device's total RAM, clamped to a sane range, when the
+     * profile has no explicit override - real per-device sizing rather
+     * than one fixed number for a 3GB phone and a 16GB tablet alike.
+     * Rounded down to the nearest 512MB for a tidy -Xmx value. */
+    private fun defaultRamMb(): Int {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memoryInfo)
+        val totalMb = memoryInfo.totalMem / (1024 * 1024)
+        val half = (totalMb / 2).coerceIn(MIN_RAM_MB.toLong(), MAX_DEFAULT_RAM_MB.toLong())
+        return (half / 512 * 512).toInt()
+    }
+
     companion object {
-        private const val DEFAULT_RAM_MB = 2048
+        private const val MIN_RAM_MB = 1024
+        private const val MAX_DEFAULT_RAM_MB = 4096
     }
 }

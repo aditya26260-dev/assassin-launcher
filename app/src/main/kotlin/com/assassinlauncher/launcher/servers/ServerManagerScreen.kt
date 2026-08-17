@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +29,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.assassinlauncher.launcher.instance.InstanceDirectoryManager
+import com.assassinlauncher.launcher.ui.theme.LauncherTopBar
 import java.io.File
 
 @Composable
@@ -47,20 +51,9 @@ fun ServerManagerScreen(profileId: String, onBack: () -> Unit) {
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Servers",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Button(onClick = onBack) { Text("Close") }
-            }
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
+        Column(modifier = Modifier.fillMaxSize()) {
+            LauncherTopBar(title = "Servers", onBack = onBack)
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
             if (showingAddForm || editingEntry != null) {
                 ServerForm(
@@ -114,6 +107,7 @@ fun ServerManagerScreen(profileId: String, onBack: () -> Unit) {
                     }
                 }
             }
+            }
         }
     }
 }
@@ -132,6 +126,8 @@ private fun ServerForm(
             value = name,
             onValueChange = { name = it },
             label = { Text("Server name") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
@@ -139,6 +135,9 @@ private fun ServerForm(
             onValueChange = { address = it },
             label = { Text("Address") },
             placeholder = { Text("play.example.com or play.example.com:25565") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onSave(name, address) }),
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         )
         Row(modifier = Modifier.padding(top = 12.dp)) {

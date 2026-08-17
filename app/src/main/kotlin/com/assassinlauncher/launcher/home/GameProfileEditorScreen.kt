@@ -155,7 +155,7 @@ fun GameProfileEditorScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                             Text(
                                 "Force system Vulkan driver",
                                 color = MaterialTheme.colorScheme.onBackground

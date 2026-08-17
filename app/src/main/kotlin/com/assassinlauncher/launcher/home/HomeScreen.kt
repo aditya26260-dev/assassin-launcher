@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.assassinlauncher.launcher.account.Account
 import com.assassinlauncher.launcher.instance.GameProfile
 import com.assassinlauncher.launcher.mods.InstalledMod
+import com.assassinlauncher.launcher.ui.theme.glow
 
 @Composable
 fun HomeScreen(
@@ -101,12 +102,16 @@ fun HomeScreen(
                     FloatingActionButton(
                         onClick = onPlayClick,
                         shape = CircleShape,
-                        modifier = Modifier.size(88.dp)
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .size(96.dp)
+                            .glow(MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
                             contentDescription = "Play",
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(44.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
@@ -121,12 +126,18 @@ fun HomeScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = activeProfile?.name ?: "No profile",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.align(Alignment.CenterVertically)
-                    )
+                    Column {
+                        Text(
+                            text = activeProfile?.name ?: "No profile",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = activeProfile?.minecraftVersion ?: "Create a profile to begin",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 

@@ -18,6 +18,18 @@ import java.io.File
  * merged LWJGL's classes into our own app's DEX instead of producing
  * standalone jar files on disk - caught before it shipped, not after).
  *
+ * The native .so files were a real, open gap for three sessions - Amethyst's
+ * own source repo builds these from SDL2/sdl2-compat git submodules a plain
+ * zip export doesn't include. Closed by extracting the real, compiled
+ * binaries directly from Amethyst's own released APK (an APK is just a
+ * zip), the same legitimacy as every other vendored binary in this project
+ * (JDK tarballs, Turnip driver, Krypton Wrapper AAR): an officially
+ * published release artifact. The jar set was updated to match too - the
+ * APK's real shipped build merges the glfw+opengl modules into one
+ * `lwjgl-3.3.3-merged-modules.jar` rather than keeping them separate the
+ * way the source repo's dev-time files did, and that's the proven
+ * combination this project now uses rather than a guessed recombination.
+ *
  * Only covers LWJGL3 (Minecraft 1.13+, Mojang group "org.lwjgl"). Older
  * versions use LWJGL2 ("org.lwjgl.lwjgl") and aren't handled - there's no
  * vendored Android build of it in hand, and this project's scope so far
@@ -28,6 +40,7 @@ class AndroidLwjglProvider(private val context: Context) {
 
     companion object {
         private const val ASSET_DIR = "lwjgl/lwjgl-android-3.3.3"
+        private const val NATIVES_ASSET_DIR = "$ASSET_DIR/natives"
         private const val LWJGL3_GROUP_PREFIX = "org.lwjgl:"
         private const val LWJGL2_GROUP_PREFIX = "org.lwjgl.lwjgl:"
     }
@@ -35,10 +48,10 @@ class AndroidLwjglProvider(private val context: Context) {
     private val internalDir: File
         get() = File(context.filesDir, "lwjgl-android-3.3.3").apply { mkdirs() }
 
-    /** Where the LWJGL native .so files would live once sourced. Referenced
-     * by the JVM launch args (java.library.path and the per-library
-     * org.lwjgl.*.libname overrides) regardless of whether anything is
-     * actually in it yet - see docs/PROGRESS.md for that gap. */
+    /** Where the extracted LWJGL native .so files live, once
+     * ensureNatives() has run - referenced by the JVM launch args
+     * (java.library.path and the per-library org.lwjgl.*.libname
+     * overrides). */
     val nativesDir: File
         get() = File(internalDir, "natives").apply { mkdirs() }
 
@@ -62,14 +75,21 @@ class AndroidLwjglProvider(private val context: Context) {
 
     /** Extracts every vendored jar to internal storage if needed and
      * returns their absolute paths, ready to splice into a classpath. */
-    fun classpathJarPaths(): List<String> {
-        val assetNames = context.assets.list(ASSET_DIR)?.filter { it.endsWith(".jar") }
-            ?: return emptyList()
+    fun classpathJarPaths(): List<String> = extractAssetDir(ASSET_DIR, internalDir) { it.endsWith(".jar") }
 
+    /** Extracts every vendored native .so to nativesDir if needed.
+     * Doesn't return paths - callers reference nativesDir itself, since
+     * that's what java.library.path and dlopen calls actually need. */
+    fun ensureNatives() {
+        extractAssetDir(NATIVES_ASSET_DIR, nativesDir) { it.endsWith(".so") }
+    }
+
+    private fun extractAssetDir(assetDir: String, outDir: File, filter: (String) -> Boolean): List<String> {
+        val assetNames = context.assets.list(assetDir)?.filter(filter) ?: return emptyList()
         return assetNames.map { name ->
-            val outFile = File(internalDir, name)
+            val outFile = File(outDir, name)
             if (!outFile.exists()) {
-                context.assets.open("$ASSET_DIR/$name").use { input ->
+                context.assets.open("$assetDir/$name").use { input ->
                     outFile.outputStream().use { output -> input.copyTo(output) }
                 }
             }

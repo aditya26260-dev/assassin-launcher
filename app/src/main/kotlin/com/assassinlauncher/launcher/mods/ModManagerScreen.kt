@@ -1,7 +1,7 @@
 package com.assassinlauncher.launcher.mods
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,11 +9,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -28,13 +32,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.assassinlauncher.launcher.instance.GameProfile
 import com.assassinlauncher.launcher.instance.InstanceDirectoryManager
 import com.assassinlauncher.launcher.instance.ModLoader
 import com.assassinlauncher.launcher.mods.remote.ModrinthHit
+import com.assassinlauncher.launcher.ui.theme.LauncherTopBar
 
 @Composable
 fun ModManagerScreen(
@@ -65,31 +73,21 @@ fun ModManagerScreen(
             color = MaterialTheme.colorScheme.background
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Mod Manager",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        // Profile context per 6.5 - shown here at the top
-                        // instead of bottom-left, same information either way.
-                        Text(
-                            text = "${profile.name} - ${profile.minecraftVersion} - ${profile.loader.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                LauncherTopBar(title = "Mod Manager", onBack = onBack) {
                     Button(onClick = onOpenResourcePacks) { Text("Resource Packs") }
                     Button(onClick = onOpenShaders) { Text("Shaders") }
                     Button(onClick = onOpenServers) { Text("Servers") }
-                    Button(onClick = onBack) { Text("Close") }
                 }
-                Divider()
+                Text(
+                    text = "${profile.name} - ${profile.minecraftVersion} - ${profile.loader.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
 
                 Row(modifier = Modifier.fillMaxSize()) {
                     Column(
@@ -183,7 +181,9 @@ private fun ModInstallerPanel(
             onValueChange = { query = it },
             label = { Text("Search mods") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { viewModel.search(query, profile) })
         )
         Button(
             onClick = { viewModel.search(query, profile) },
@@ -231,8 +231,19 @@ private fun ModHitRow(hit: ModrinthHit, onCardClick: () -> Unit, onInstall: () -
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        AsyncImage(
+            model = hit.iconUrl,
+            contentDescription = null,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
         Column(
-            modifier = Modifier.weight(1f).clickable(onClick = onCardClick)
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp)
+                .clickable(onClick = onCardClick)
         ) {
             Text(
                 text = hit.title,

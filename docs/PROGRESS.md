@@ -1419,6 +1419,196 @@ this run - the entire error list was this one thing.
 ## Next action
 Re-sync and push again.
 
+## Real device feedback - first time this app has actually been used
+
+Aditya built and installed the APK and sent back six screenshots plus a
+long, specific list from actually using it. Real usage surfaces things
+code review never will - several of these were genuine bugs, not
+opinions.
+
+**Fixed, verified against real screenshots or real docs:**
+
+- **Microsoft sign-in 401.** Diagnosed against Microsoft's own current
+  docs rather than guessed: the redirect URI needs registering under
+  Azure's "Mobile and desktop applications" platform specifically, not
+  "Web" - a previous session's own comment said Web, which was wrong.
+  "Allow public client flows" also needs to be Yes under Authentication ->
+  Advanced settings, a separate required setting. Both confirmed via
+  Microsoft Learn, not assumed. Comment corrected; the actual Azure
+  Portal change is Aditya's to make, outside what code can fix.
+- **Back gesture exiting the app entirely.** Real, confirmed root cause:
+  no back stack existed anywhere, no `BackHandler` anywhere, so the
+  system gesture always fell through to finishing the Activity regardless
+  of which screen was open. Added `BackHandler` to every non-Home screen
+  in `MainActivity.kt` in one pass.
+- **No visible back button on most screens**, and Settings' own back
+  button sitting at the bottom of a scrolling list. Built one reusable
+  `LauncherTopBar` component and applied it across Settings, Credits,
+  Mod Manager, Content Manager (resource packs/shaders), and Server
+  Manager - consistent placement everywhere at once instead of a fix
+  per screen.
+- **Display not extending under the notch.** Real, standard Android
+  gap: `enableEdgeToEdge()` plus explicit
+  `layoutInDisplayCutoutMode` (version-branched: `ALWAYS` on API 30+,
+  `SHORT_EDGES` down to API 28) - added once in `MainActivity.onCreate`,
+  with a single shared `windowInsetsPadding` wrapper so every screen's
+  actual content stays clear of system bars without each screen handling
+  insets individually.
+- **Server address field allowing multiple lines.** Missing `singleLine =
+  true` - added to both fields, plus proper IME actions (Next/Done) so
+  the keyboard behaves like a real form.
+- **Enter key not submitting mod/resource pack/shader search.** Missing
+  `KeyboardActions`/`ImeAction.Search` wiring - added to both the Mod
+  Manager and Content Manager search fields.
+- **"Force system Vulkan driver" toggle text overlapping the switch.**
+  Real layout bug: the label Column had no width constraint inside its
+  Row, so long description text didn't leave room for the Switch. Fixed
+  with `Modifier.weight(1f)` - the same fix used elsewhere in this
+  project for description-plus-control rows already.
+- **Mod/resource pack/shader icons never showing.** Real, notable finding:
+  the icon URLs were already being fetched from Modrinth's API and stored
+  on `ModrinthHit.iconUrl` - just never rendered anywhere. Added Coil
+  (`io.coil-kt:coil-compose:2.7.0`) and wired `AsyncImage` into both mod
+  rows and content rows. A rendering gap, not a data gap.
+- **RAM allocation defaulting to a flat 2048MB regardless of device.**
+  Now reads real total device memory via `ActivityManager.MemoryInfo`
+  and defaults to half of it, clamped to a sane 1024-4096MB range.
+- **The first-launch screen's "AI-looking text."** Real, specific cause:
+  it was directly displaying `RenderPathSelector`'s internal reasoning
+  strings (written for future debugging, not end users - e.g. "not a
+  claimed performance win, just the most validated default until real
+  device testing says otherwise"). Rewritten as an actual checklist
+  (Reading device info -> Checking driver support -> Choosing the best
+  renderer -> Preparing your setup) matching `FirstLaunchViewModel`'s
+  real step sequence, ending in a short, clean renderer summary with no
+  exposed developer reasoning, plus the recommended-keyboard-and-mouse
+  notice Aditya asked for.
+
+**Real visual identity built - the previous theme's own comment
+explicitly deferred this to "Phase 3."** That phase is now. Sourced and
+verified two real, properly OFL-licensed font families directly from
+their upstream repos (not assumed available): Space Grotesk for
+headlines/display, Manrope for body/UI text - confirmed via each font's
+own embedded name-table copyright strings, not just filenames. New
+color system (`ui/theme/Theme.kt`): an obsidian/slate dark palette with
+a single considered crimson brand accent and a muted gold pulled from
+Minecraft's own world (ingots, XP) rather than an arbitrary second
+color - error intentionally a distinct coral-orange so it never reads as
+the same color as the primary action. A reusable soft-glow component
+(`ui/theme/Glow.kt`) applied to the Home screen's Play button as the
+one signature visual touch, used sparingly rather than everywhere.
+Applied to Home screen directly; every other screen inherits the new
+colors/type automatically through `MaterialTheme`, but hasn't had a
+full per-screen pass yet - see below.
+
+**One mix-up worth naming plainly**: the file sent for "the Amethyst
+APK" was the same 1021-file source zip already in hand, not a compiled
+APK - re-confirmed by checking it directly rather than assuming. Still
+waiting on the actual `Amethyst.apk` release asset for the LWJGL-native
+binary-extraction plan from two sessions ago.
+
+**Real, honestly out of scope for this pass** - large enough asks that
+folding them in here would mean doing them shallowly:
+- Filter/sort in the mod/content browser (popularity, latest, etc.)
+- Server list showing real icon + MOTD (needs implementing Minecraft's
+  actual server-list-ping protocol, not just reading servers.dat)
+- Version selection, instance image picker, and renderer/runtime
+  selection UI in the profile editor - genuinely not built yet, matching
+  what Aditya already expected
+- A full per-screen visual pass applying the new theme's spacing/
+  hierarchy deliberately everywhere, not just Home
+- App icon redesign - a real graphic-design task this session doesn't
+  have the right tool for; worth a dedicated pass
+- The Freedreno/Zink renderer additions and wider Turnip GPU coverage
+  Aditya raised - real feature requests, not bugs, queued behind the
+  above
+
+## Next action
+Re-sync and push. Given the number of files this round touched, this is
+the build most likely to surface something - not because any single
+change was risky, but because of how many landed at once.
+
+## A real mistake, caught by Aditya, then a real breakthrough
+
+Worth recording plainly rather than glossing over: Aditya uploaded what
+turned out to be the actual `Amethyst.apk` release build asked for two
+sessions ago. It was assumed - from the filename pattern and the
+internal `app-debug.apk`/`app-debug.md5` structure matching this
+project's own CI artifact convention - to be another build of this
+project instead, without actually checking. Aditya caught it directly,
+with a real, checkable fact (file size didn't match this project's own
+builds). Checked properly this time: extracted the actual APK, inspected
+`AndroidManifest.xml`-adjacent resources, native library names, dex
+class strings - genuinely, unambiguously the real Amethyst APK.
+
+That correction unlocked something real. An APK is just a zip, and this
+one is the actual compiled, real-device-tested build - meaning the
+native `.so` files this project has been missing since the LWJGL work
+started (three sessions of the same open gap: "the jars are vendored,
+the native binaries aren't") were sitting right there, extracted for
+real:
+
+- The complete real Android LWJGL 3.3.3 native set for arm64-v8a
+  (`liblwjgl.so` and every per-module native - opengl, stb, nanovg,
+  tinyfd, vma, freetype, shaderc), vendored at
+  `app/src/main/assets/lwjgl/lwjgl-android-3.3.3/natives/`.
+  `AndroidLwjglProvider` now has a real `ensureNatives()` extracting
+  these alongside the jars, wired into `GameLaunchOrchestrator`.
+- The real jar set was corrected to match what the APK actually ships -
+  a merged `lwjgl-3.3.3-merged-modules.jar` replacing the separate
+  glfw/opengl jars this project had guessed at recombining from the
+  source repo's dev-time files. Using their proven real combination
+  rather than a guess.
+- Real, compiled `libopenal.so` for arm64-v8a, at
+  `app/src/main/jniLibs/arm64-v8a/` - the standard Android convention
+  this project's own `dlopenJdkLibrariesInOrder` already expected it at,
+  so no Kotlin changes were needed beyond adding the file itself.
+
+**Added `-Dorg.lwjgl.system.SharedLibraryExtractPath` for the new
+natives, deliberately not a full set of per-module `-Dorg.lwjgl.*.libname=`
+overrides.** Caught a filename bug in an early draft of this (referenced
+`liblwjgl_freetype.so`, which isn't what actually got extracted -
+the real file is `libfreetype.so`) while double-checking it, which
+prompted reconsidering the whole approach rather than just fixing the
+one name: `-Djava.library.path` already points at the natives directory
+through the existing `natives_directory` argument substitution, which is
+enough on its own for LWJGL's default resolution to find these (every
+filename here is LWJGL's own unmodified build output). Only a few of the
+individual libname property names were ever actually confirmed from
+Amethyst's real source; guessing the rest would trade one real risk for
+several unverified ones.
+
+**Real, precise research artifact, not yet acted on**: extracted and
+read the complete exported JNI symbol table from Amethyst's
+`libpojavexec.so` directly (`readelf --dyn-syms`), rather than continuing
+to infer it from source reading alone. Confirmed exactly what calling
+into this compiled binary would require: recreating specific Java/Kotlin
+class names precisely - `com.oracle.dalvik.VMLauncher`,
+`net.kdt.pojavlaunch.utils.JREUtils`, `net.kdt.pojavlaunch.Logger`,
+`net.kdt.pojavlaunch.Tools` (with a nested `SDL` class), and patched
+`org.lwjgl.glfw.CallbackBridge`/`GLFW`/`org.lwjgl.opengl.PojavRendererInit`/
+`org.lwjgl.vulkan.VK` classes with exactly matching native method
+signatures - since JNI symbol resolution is exact-match by fully-
+qualified name, not negotiable or approximate. `VMLauncher.launchJVM`
+matches what this project's own `jvm_launcher_bridge.cpp` already does
+(the JLI_Launch mechanism, already confirmed working). The genuinely new
+surface is `JREUtils.setupBridgeWindow`/`releaseBridgeWindow` (the
+Surface/EGL bridge, still not built) and the `CallbackBridge` input
+methods. A real, now precisely-scoped next task rather than an unknown
+one - not attempted in this same session, since getting nine class
+signatures exactly right deserves its own focused pass, not a rushed
+addition alongside everything else this session already touched.
+
+## Next action
+Two independent paths, same as the pattern established last time this
+kind of fork came up: (1) build the Surface/EGL bridge using Amethyst's
+compiled `libpojavexec.so` directly, now that the exact required class
+surface is known precisely rather than approximately; (2) continue with
+the asset downloader (textures/sounds/lang files), fully independent of
+the above and still a real, separate gap. Re-sync and push first either
+way, to get this session's real binary integration through an actual
+compile.
+
 ## Sixth real CI run - Kotlin compiles clean; native code, for the first
 ## time, actually started building
 

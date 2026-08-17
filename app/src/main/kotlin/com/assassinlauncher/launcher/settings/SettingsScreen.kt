@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.assassinlauncher.launcher.hardware.DeviceProfile
 import com.assassinlauncher.launcher.input.CursorSettings
 import com.assassinlauncher.launcher.input.CursorSettingsStore
+import com.assassinlauncher.launcher.ui.theme.LauncherTopBar
 import kotlinx.coroutines.launch
 
 @Composable
@@ -61,19 +62,15 @@ fun SettingsScreen(device: DeviceProfile, onBack: () -> Unit) {
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
+        Column(modifier = Modifier.fillMaxSize()) {
+            LauncherTopBar(title = "Settings", onBack = onBack)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 32.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
             SettingsSection(title = "Your device") {
                 InfoRow("GPU", device.gpuRenderer)
                 InfoRow("GPU family", device.gpuFamily.name)
@@ -179,9 +176,6 @@ fun SettingsScreen(device: DeviceProfile, onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            Button(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Back")
             }
         }
     }
@@ -195,7 +189,7 @@ private fun SettingsSection(title: String, content: @Composable ColumnScope.() -
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
-        Divider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         content()
     }
 }
@@ -214,30 +208,25 @@ private fun InfoRow(label: String, value: String) {
 @Composable
 private fun CreditsScreen(onBack: () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "Credits and licenses",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Credits.entries.forEach { entry ->
-                Column {
-                    Text(entry.name, color = MaterialTheme.colorScheme.onBackground)
-                    Text(
-                        entry.license + (entry.note?.let { " - $it" } ?: ""),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        Column(modifier = Modifier.fillMaxSize()) {
+            LauncherTopBar(title = "Credits and licenses", onBack = onBack)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 32.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Credits.entries.forEach { entry ->
+                    Column {
+                        Text(entry.name, color = MaterialTheme.colorScheme.onBackground)
+                        Text(
+                            entry.license + (entry.note?.let { " - $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-            }
-            Button(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Back")
             }
         }
     }
