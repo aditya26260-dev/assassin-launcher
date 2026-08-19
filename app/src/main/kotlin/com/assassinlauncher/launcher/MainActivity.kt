@@ -9,11 +9,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -73,15 +70,16 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             AssassinLauncherTheme {
-                // Single centralized fix for every screen at once: the
-                // background (each screen's own Surface) now correctly
-                // extends fully edge-to-edge including under the notch,
-                // while actual content stays clear of the status bar,
-                // notch, and nav bar via this one shared inset padding -
-                // not something each screen needs to handle individually.
-                Box(modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)) {
-                    AppRoot(instanceRepository, accountRepository)
-                }
+                // No inset padding at this outer level - that was the
+                // actual bug in the previous attempt at this. Padding
+                // applied here shrinks the constraints passed down to
+                // every screen's own background Surface, so nothing
+                // ever actually reached the notch even though the
+                // comment here claimed it did. Each screen's background
+                // now genuinely fills the true full screen; insets are
+                // handled at the content level instead (LauncherTopBar
+                // for most screens, handled directly for Home).
+                AppRoot(instanceRepository, accountRepository)
             }
         }
     }
@@ -115,7 +113,9 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
     var installedMods by remember { mutableStateOf<List<InstalledMod>>(emptyList()) }
 
     fun rescanMods(profileId: String) {
-        installedMods = ModScanner.scan(InstanceDirectoryManager(context).modsDir(profileId))
+        coroutineScope.launch {
+            installedMods = ModScanner.scan(InstanceDirectoryManager(context).modsDir(profileId))
+        }
     }
 
     LaunchedEffect(Unit) {

@@ -57,7 +57,7 @@ fun ModManagerScreen(
     var selectedHitForDetail by remember { mutableStateOf<ModrinthHit?>(null) }
     val context = LocalContext.current
 
-    fun rescanInstalled() {
+    suspend fun rescanInstalled() {
         installedMods = ModScanner.scan(InstanceDirectoryManager(context).modsDir(profile.id))
     }
 

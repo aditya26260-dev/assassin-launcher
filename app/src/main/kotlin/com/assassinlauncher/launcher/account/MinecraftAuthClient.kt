@@ -197,12 +197,24 @@ class MinecraftAuthClient {
         return Result.success(SignInResult(profile, msTokens, session))
     }
 
+    /** Every failure so far has only ever surfaced the HTTP status code -
+     * "HTTP 401" and nothing else - because the actual response body,
+     * which is where Microsoft puts the real, specific reason
+     * (an AADSTS code and a real description, confirmed against their
+     * own current docs), was being discarded before ever being read.
+     * Two real config mistakes already got found and fixed on guesses
+     * this cost; reading the body is what turns the next attempt into a
+     * real answer instead of a fourth guess. */
     private fun executeForBody(request: Request): String {
         client.newCall(request).execute().use { response ->
+            val body = response.body?.string()
             if (!response.isSuccessful) {
-                throw IOException("Request to ${request.url} failed: HTTP ${response.code}")
+                val detail = body?.takeIf { it.isNotBlank() } ?: "(no response body)"
+                throw IOException(
+                    "Request to ${request.url} failed: HTTP ${response.code} - $detail"
+                )
             }
-            return response.body?.string() ?: throw IOException("Empty response body")
+            return body ?: throw IOException("Empty response body")
         }
     }
 

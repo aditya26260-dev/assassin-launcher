@@ -1,5 +1,7 @@
 package com.assassinlauncher.launcher.mods
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.util.zip.ZipFile
@@ -26,13 +28,19 @@ object ModScanner {
 
     private const val DISABLED_SUFFIX = ".disabled"
 
-    fun scan(modsDir: File): List<InstalledMod> {
-        if (!modsDir.exists()) return emptyList()
+    /** Real, confirmed blocking I/O per mod jar (opens and parses each
+     * one) - suspend + IO-dispatched so this can't freeze the caller's
+     * thread the way a plain blocking call did before. Was exactly the
+     * "takes too long" first-launch-to-home delay a real device test
+     * surfaced: this ran on the composition's default dispatcher with
+     * no IO switch at all, however many mods happened to be installed. */
+    suspend fun scan(modsDir: File): List<InstalledMod> = withContext(Dispatchers.IO) {
+        if (!modsDir.exists()) return@withContext emptyList()
         val jarFiles = modsDir.listFiles { file ->
             file.name.endsWith(".jar") || file.name.endsWith(".jar$DISABLED_SUFFIX")
         } ?: emptyArray()
 
-        return jarFiles.map { file ->
+        jarFiles.map { file ->
             val enabled = !file.name.endsWith(DISABLED_SUFFIX)
             val realFileName = if (enabled) file.name else file.name.removeSuffix(DISABLED_SUFFIX)
             val fabricInfo = runCatching { readFabricModInfo(file) }.getOrNull()

@@ -1609,6 +1609,150 @@ the above and still a real, separate gap. Re-sync and push first either
 way, to get this session's real binary integration through an actual
 compile.
 
+## Real device feedback round two - a genuine mistake, then real fixes
+
+Aditya sent a large, detailed round of feedback from actual use,
+including screenshots of the exact Azure settings and the exact error
+still occurring. One real mistake this session, caught immediately by
+double-checking rather than assumed correct: pattern-matched an uploaded
+file's name against a prior upload instead of checking its actual
+content directly - the earlier "Amethyst APK" correction from last
+session was itself a lesson in exactly this, and it needed relearning
+in the moment rather than treated as already learned.
+
+**The edge-to-edge/notch fix from two sessions ago was real but broken -
+found and corrected.** Root cause, confirmed by re-reading the actual
+code rather than assuming the earlier fix was sound: `Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing))`
+was applied to the outermost wrapper around every screen. Padding
+applied at that level shrinks the layout constraints passed down to
+every screen's own background `Surface` - so even though the comment at
+the time claimed backgrounds extended fully edge-to-edge, they never
+actually could have, the constraints reaching them were already reduced
+before they ever measured themselves. Removed the outer wrapper
+entirely; inset handling moved to the content level instead -
+`LauncherTopBar` now applies `WindowInsets.statusBars` itself, covering
+Settings/Servers/Mods/Content automatically, and Home (which doesn't use
+`LauncherTopBar`) got the same treatment directly. Backgrounds now
+genuinely reach the true screen edges; content stays clear of system
+bars without every screen needing to remember to do it separately.
+
+**Found a real, confirmed cause for "takes too long to reach home even
+after the checklist finishes."** `ModScanner.scan()` and
+`ContentScanner.scan()` were both plain, blocking functions - opening
+and parsing every installed mod jar synchronously, with no dispatcher
+switch, called from a `LaunchedEffect` that runs on the composition's
+default (main-thread-affined) dispatcher. However many mods happen to be
+installed, that whole scan ran on the UI thread. Both are now suspend
+functions wrapped in `withContext(Dispatchers.IO)`; call sites fixed to
+match - two were already inside a `LaunchedEffect` and needed no further
+change beyond becoming suspend-compatible, one (`MainActivity`'s
+`rescanMods`, called from several non-suspend callback sites) now
+launches its own coroutine internally instead, so nothing calling it
+needed to change.
+
+**Found a real, connected explanation for two separate complaints at
+once.** The default Material3 `Switch`'s unchecked-state border color
+comes from `colorScheme.outline`, deliberately set to a subtle near-
+background hairline tone in this theme for dividers - which meant every
+toggle in its "off" state was nearly invisible against the dark
+background, exactly as reported. That almost certainly also explains
+"advanced settings seem to not be built" - the switch controlling
+whether that section is expanded was one of the affected toggles, so it
+was likely just invisible and un-tapped, not missing. Added a shared
+`launcherSwitchColors()` (real, sufficient off-state contrast) and
+applied it to both switches in the profile editor. One real self-caught
+mistake fixing this: an early edit accidentally overwrote
+`LauncherTopBar.kt`'s own content instead of creating a new file for the
+switch colors - caught immediately by reviewing the diff before moving
+on, not left in.
+
+**Microsoft sign-in still 401, and this needs one more specific piece of
+information to keep going responsibly.** Aditya's screenshots confirm
+both things flagged last time are now genuinely correct on the Azure
+side - "Allow public client flows" enabled, redirect URI registered
+under "Mobile and desktop applications." Re-checked this project's own
+token-exchange code line by line against both screenshots and found
+nothing wrong in either place, which means continuing to guess would
+mean re-treading the same ground rather than finding something new. The
+one thing that can't be verified from what's been shared: whether the
+Application (client) ID hardcoded in `MicrosoftAuthConfig.kt`
+(`1bb23364-a504-4974-9e60-4c71dbbca67a`) actually matches this specific
+Azure app's real ID, and whether "Supported account types" includes
+personal Microsoft accounts (this project's code calls the `/consumers/`
+tenant endpoint specifically, which requires that). Neither is visible
+in the Authentication-tab screenshots shared so far - both are on the
+app's Overview page.
+
+**Not yet addressed - a large, real list, not silently dropped:**
+- Loud/low-contrast visual issues: text field focus color reading as an
+  error state, typed text visibility while typing
+- The "Installed" resource pack/shader list showing only a filename
+  instead of a full card (icon, toggle, delete, update check) - clearly
+  specified, not yet built
+- Sort and filter in the mod/content browser
+- The full 5-section settings screen Aditya specified in detail (device
+  info, renderer/driver selection with custom import, JVM/runtime with a
+  smart default and custom import, controls, misc/experimental toggles)
+  - a real, substantial piece of work on its own, not started this round
+- Default version selection behavior in the profile editor, and the
+  version field being a raw text box instead of a real picker
+- Popup/dialog polish (blur, animation)
+- A second pass on the first-launch screen's look specifically, separate
+  from the real delay bug fixed above
+
+## Next action
+Aditya's explicit ask: whether MobileGlues was the right choice for his
+specific device deserves a real answer next, not a guess - worth walking
+through RenderPathSelector's actual decision path against his real
+device profile rather than asserting either "it was right" or "it was
+wrong." Beyond that: the settings screen rebuild is the single largest
+remaining item and probably deserves its own focused session rather than
+being squeezed in alongside everything else.
+
+## Microsoft login - two real guesses ruled out with evidence, a real
+## diagnostic gap found instead of a third guess
+
+Aditya screenshotted the Azure app's actual Overview and Supported
+accounts pages - the two pieces of information that couldn't be checked
+last round. Both, checked directly against this project's own code:
+
+- Application (client) ID on the Overview page: `1bb23364-a504-4974-9e60-4c71dbbca67a`
+  - matches `MicrosoftAuthConfig.CLIENT_ID` exactly.
+- Supported account types: "Personal accounts only" - correct for this
+  project's `/consumers/` tenant endpoint.
+- Redirect URI, confirmed via the actual Edit dialog: the exact string
+  this project's code expects, checked as the active one, correctly
+  under "Mobile and desktop applications."
+- Allow public client flows: still Enabled.
+
+Every real hypothesis from the last two rounds is now ruled out with
+actual evidence, not just re-asserted as probably fine. Checked
+Microsoft's own current authorization-code-flow reference doc directly
+(not general PKCE explainers) for what was left to consider - PKCE
+specifically maps to `invalid_grant`-class errors in Microsoft's own
+error table, which is a different failure class than `invalid_client`
+(the one 401 actually corresponds to), which argues against PKCE being
+the cause here rather than for it. Guessing a third specific cause
+without new evidence would be repeating the same mistake in a new
+direction.
+
+**Real gap found instead**: `MinecraftAuthClient.executeForBody()` threw
+away the actual response body on every failed request, before ever
+reading it - the error the app has shown every time,
+"Sign-in failed: Request to [url] failed: HTTP 401," was built from only
+the URL and status code. Microsoft's own docs confirm the response body
+on a failed token request carries a specific `AADSTS` code and a real
+description - that's the actual, specific answer, and it's never once
+been seen because the code discarded it before display. Fixed to read
+and surface the full body on failure. The next attempt will show
+Microsoft's own specific reason instead of a bare status code, which
+turns the next debugging round into reading a real answer instead of
+proposing a fourth hypothesis.
+
+## Next action
+Aditya re-syncs, pushes, and attempts sign-in again. Whatever the error
+message says this time is the real next fact to work from.
+
 ## Sixth real CI run - Kotlin compiles clean; native code, for the first
 ## time, actually started building
 

@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.assassinlauncher.launcher.hardware.ManualRendererOverride
 import com.assassinlauncher.launcher.instance.GameProfile
+import com.assassinlauncher.launcher.ui.theme.launcherSwitchColors
 
 private val availableJavaRuntimes = listOf("Auto", "Java 8", "Java 17", "Java 21", "Java 25")
 
@@ -116,7 +117,11 @@ fun GameProfileEditorScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                Switch(checked = advancedExpanded, onCheckedChange = { advancedExpanded = it })
+                Switch(
+                    checked = advancedExpanded,
+                    onCheckedChange = { advancedExpanded = it },
+                    colors = launcherSwitchColors()
+                )
             }
 
             if (advancedExpanded) {
@@ -170,7 +175,8 @@ fun GameProfileEditorScreen(
                         }
                         Switch(
                             checked = forceSystemDriver,
-                            onCheckedChange = { forceSystemDriver = it }
+                            onCheckedChange = { forceSystemDriver = it },
+                            colors = launcherSwitchColors()
                         )
                     }
 
