@@ -25,12 +25,18 @@ import kotlinx.coroutines.launch
 
 private fun buildAuthorizeUrl(): String {
     fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
+    // "redirect_url" here too, matching the same nonstandard parameter
+    // name this legacy endpoint uses at the token step - confirmed
+    // against Amethyst's real authorize URL, not assumed consistent.
+    // No response_mode param either - a v2.0-endpoint concept this
+    // older endpoint doesn't expect, dropped to match their proven URL
+    // shape exactly rather than carrying over something that belonged
+    // to the previous flow.
     return MicrosoftAuthConfig.AUTHORIZE_URL +
         "?client_id=${enc(MicrosoftAuthConfig.CLIENT_ID)}" +
         "&response_type=code" +
-        "&redirect_uri=${enc(MicrosoftAuthConfig.REDIRECT_URI)}" +
-        "&scope=${enc(MicrosoftAuthConfig.SCOPE)}" +
-        "&response_mode=query"
+        "&redirect_url=${enc(MicrosoftAuthConfig.REDIRECT_URI)}" +
+        "&scope=${enc(MicrosoftAuthConfig.SCOPE)}"
 }
 
 sealed class MicrosoftSignInState {

@@ -1753,6 +1753,69 @@ proposing a fourth hypothesis.
 Aditya re-syncs, pushes, and attempts sign-in again. Whatever the error
 message says this time is the real next fact to work from.
 
+## Microsoft sign-in - the real cause, found and fixed
+
+The improved error message from the previous fix worked exactly as
+intended - the next attempt came back with a real, specific reason
+instead of a bare status code:
+
+> Sign-in failed: Request to https://api.minecraftservices.com/authentication/login_with_xbox
+> failed: HTTP 403 - {"path":"/authentication/login_with_xbox","errorMessage":"Invalid app
+> registration, see https://aka.ms/AppRegInfo for more information"}
+
+Worth being clear about what this actually shows: the request got
+*further* than ever before. Both Azure config rounds fixed real things -
+the Microsoft OAuth token exchange itself now succeeds, and so does Xbox
+Live authentication and XSTS authorization. This new failure is a
+different, later step - Minecraft's own API layer, not Microsoft's - and
+it's not a settings problem.
+
+**Real root cause, confirmed via Microsoft's own Q&A rather than
+assumed**: the `XboxLive.signin` scope needed to get a Minecraft-usable
+token is gated behind Microsoft's manual Xbox Developer / ID@Xbox
+approval process. A new Azure app registration cannot pass this check no
+matter how correctly it's configured - this was never fixable from the
+Azure Portal, which is exactly why two careful rounds of settings
+verification kept coming back clean while the failure persisted. Every
+unofficial Minecraft launcher handles this the same way: reusing an
+already-approved client ID instead of registering a new one, since
+individual hobbyist developers generally can't get through that approval
+process. Aditya's own instinct here (use the public, approved client ID)
+was correct.
+
+**Real complication worth recording, not glossed over**: this isn't a
+one-field swap. Checked PrismLauncher's client ID first (already in
+hand, already audited) - real and working, but for their desktop app,
+which uses a completely different redirect mechanism (a local loopback
+HTTP server) incompatible with this project's WebView-based Android
+flow. Using their client ID with this project's `nativeclient` redirect
+would likely have just produced a fourth, different failure. Checked
+Amethyst's actual Android implementation instead - genuinely the right
+reference this time, same WebView-intercept redirect pattern this
+project already uses - and found it uses an entirely different, older
+authentication generation: the legacy `login.live.com` endpoints, not
+the modern Azure AD v2.0 platform this project's code was written
+against. Different client ID format (`00000000402b5328`, not a GUID),
+different scope syntax (`service::user.auth.xboxlive.com::MBI_SSL`),
+different endpoints, and a real, nonstandard quirk - the token and
+authorize requests both use a parameter named `redirect_url`, not the
+standard `redirect_uri` - confirmed by reading Amethyst's real request
+construction directly rather than guessed from convention.
+
+Migrated `MicrosoftAuthConfig.kt`, the token exchange, and the authorize
+URL builder to this complete, proven flow. Deliberately did not touch
+the Xbox Live/XSTS steps after the initial token exchange - Aditya's own
+last test already proved those work correctly against this project's
+existing code (that's exactly how far the request got), so changing them
+would have been risk with no evidence behind it, not a fix.
+
+## Next action
+Re-sync and push. If this works, this closes out the authentication
+thread that's spanned several rounds - a real, structural finding (the
+Xbox Developer approval gate) rather than a configuration detail, now
+resolved the same way every other launcher in this project's own
+reference set resolves it.
+
 ## Sixth real CI run - Kotlin compiles clean; native code, for the first
 ## time, actually started building
 

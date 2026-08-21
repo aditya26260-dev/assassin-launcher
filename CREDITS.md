@@ -38,7 +38,25 @@ actual requirements, not folded in silently.
   mechanism confirmed for MobileGlues. Base GL4ES/HolyGL4ES itself not
   obtained yet - lowest-priority true last resort.
 - **Zink** — MIT (same Mesa project as Turnip).
-- **LWJGL 3** — BSD-3-Clause, confirmed directly on Maven Central's own
+- **Microsoft/Xbox/Minecraft sign-in client ID** — not a code dependency,
+  a real, load-bearing configuration value: `00000000402b5328`, along
+  with its matching `login.live.com` legacy OAuth endpoints and scope
+  format, sourced directly from Amethyst's real, working, currently-
+  shipping app. The Xbox Live sign-in scope needed to get a Minecraft-
+  usable token is gated behind Microsoft's manual Xbox Developer/ID@Xbox
+  approval process on the modern Azure AD v2.0 platform, confirmed via
+  Microsoft's own Q&A - not something a new app registration can pass no
+  matter how correctly it's configured, which is why this project's own
+  from-scratch Azure app registration got through basic Microsoft sign-in
+  but consistently failed at the Minecraft-specific step. Every
+  unofficial Minecraft launcher solves this the same way: reusing an
+  already-approved client ID rather than obtaining a new one, since
+  individual hobbyist developers generally can't get through that
+  approval process for a personal project. This one is Amethyst's,
+  chosen because it's Android/WebView-based like this project, unlike
+  PrismLauncher's client ID (also checked first), which is desktop-only
+  and pairs with a different redirect mechanism (a local loopback HTTP
+  server) that wouldn't have worked here regardless.
   published POM metadata. Mojang's manifest carries no Android LWJGL
   natives at all (every reference launcher sources this from a custom
   Android-targeted build, not Maven Central); the Java-side 3.3.3 jars

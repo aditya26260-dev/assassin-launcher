@@ -29,11 +29,17 @@ class MinecraftAuthClient {
     suspend fun exchangeCodeForMicrosoftToken(code: String): Result<MicrosoftTokens> =
         withContext(Dispatchers.IO) {
             runCatching {
+                // "redirect_url" (not the more standard "redirect_uri") -
+                // this legacy login.live.com endpoint really does use
+                // this exact, slightly nonstandard parameter name,
+                // confirmed directly against Amethyst's real, working
+                // request rather than assumed to follow the usual
+                // convention.
                 val body = listOf(
                     "client_id" to MicrosoftAuthConfig.CLIENT_ID,
                     "code" to code,
                     "grant_type" to "authorization_code",
-                    "redirect_uri" to MicrosoftAuthConfig.REDIRECT_URI,
+                    "redirect_url" to MicrosoftAuthConfig.REDIRECT_URI,
                     "scope" to MicrosoftAuthConfig.SCOPE
                 ).joinToString("&") { (key, value) -> "$key=${encode(value)}" }
 
@@ -58,6 +64,7 @@ class MinecraftAuthClient {
                     "client_id" to MicrosoftAuthConfig.CLIENT_ID,
                     "refresh_token" to refreshToken,
                     "grant_type" to "refresh_token",
+                    "redirect_url" to MicrosoftAuthConfig.REDIRECT_URI,
                     "scope" to MicrosoftAuthConfig.SCOPE
                 ).joinToString("&") { (key, value) -> "$key=${encode(value)}" }
 
