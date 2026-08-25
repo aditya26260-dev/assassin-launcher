@@ -91,7 +91,12 @@ class MinecraftAuthClient {
                         JSONObject().apply {
                             put("AuthMethod", "RPS")
                             put("SiteName", "user.auth.xboxlive.com")
-                            put("RpsTicket", "d=$msAccessToken")
+                            // Amethyst's working reference (MicrosoftBackgroundLogin.java)
+                            // sends this completely unprefixed for the legacy live.com
+                            // flow - the "d=" prefix is a modern-OAuth2 convention that
+                            // doesn't apply here. Confirmed against their source, not
+                            // guessed.
+                            put("RpsTicket", msAccessToken)
                         }
                     )
                     put("RelyingParty", "http://auth.xboxlive.com")
