@@ -105,7 +105,19 @@ fun MicrosoftSignInScreen(
                                 request: android.webkit.WebResourceRequest?
                             ): Boolean {
                                 val url = request?.url?.toString() ?: return false
-                                if (url.startsWith(MicrosoftAuthConfig.REDIRECT_URI)) {
+                                // This client ID's real redirect target isn't the
+                                // https://login.live.com/oauth20_desktop.srf this
+                                // screen requests - two real device tests now
+                                // show ms-xal-<clientid>://auth/?code=... ("xal" =
+                                // Xbox Authentication Library, Microsoft's own
+                                // mobile auth SDK naming). This client ID is
+                                // evidently tied to that infrastructure and
+                                // Microsoft's server forces it irrespective of
+                                // the requested redirect_url. Confirmed from two
+                                // actual failed WebView navigations, not guessed.
+                                val isConfiguredRedirect = url.startsWith(MicrosoftAuthConfig.REDIRECT_URI)
+                                val isXalRedirect = url.startsWith("ms-xal-${MicrosoftAuthConfig.CLIENT_ID}://")
+                                if (isConfiguredRedirect || isXalRedirect) {
                                     val uri = android.net.Uri.parse(url)
                                     val code = uri.getQueryParameter("code")
                                     val error = uri.getQueryParameter("error_description")
