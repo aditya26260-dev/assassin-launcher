@@ -17,7 +17,16 @@ import com.assassinlauncher.launcher.jvm.VersionRuleEvaluator
  */
 object GameArgumentBuilder {
 
-    private val TOKEN_REGEX = Regex("\\$\\{([a-zA-Z0-9_]+)}")
+    // Android's own regex engine (ICU-backed, not desktop Java's) rejected
+    // the previous "\\$\\{(...)}"  form outright at class-init time -
+    // PatternSyntaxException, crashing every launch attempt before the
+    // embedded JVM was ever reached. Wrapping each brace in its own
+    // single-character class sidesteps engine-specific escaping rules for
+    // \{ / \} entirely - a character class containing one literal
+    // character is unambiguous in every regex flavor. Confirmed from the
+    // actual PatternSyntaxException + GameArgumentBuilder.kt:20 in the
+    // crash trace, not guessed.
+    private val TOKEN_REGEX = Regex("\\$[{]([a-zA-Z0-9_]+)[}]")
 
     fun buildJvmArgs(
         details: MinecraftVersionDetails,
