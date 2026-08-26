@@ -25,8 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.assassinlauncher.launcher.account.AccountChooserScreen
 import com.assassinlauncher.launcher.account.AccountRepository
 import com.assassinlauncher.launcher.account.MicrosoftSignInScreen
+import com.assassinlauncher.launcher.account.OfflineSignInScreen
 import com.assassinlauncher.launcher.firstlaunch.FirstLaunchScreen
 import com.assassinlauncher.launcher.hardware.DeviceProfile
 import com.assassinlauncher.launcher.hardware.DeviceProfileStore
@@ -95,6 +97,8 @@ private sealed class Screen {
     data object Shaders : Screen()
     data object Servers : Screen()
     data object MicrosoftSignIn : Screen()
+    data object AccountChooser : Screen()
+    data object OfflineSignIn : Screen()
 }
 
 /**
@@ -214,13 +218,31 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
                         onCancel = { screen = Screen.Home }
                     )
                 }
+                screen is Screen.AccountChooser -> {
+                    BackHandler { screen = Screen.Home }
+                    AccountChooserScreen(
+                        onChooseMicrosoft = { screen = Screen.MicrosoftSignIn },
+                        onChooseOffline = { screen = Screen.OfflineSignIn },
+                        onCancel = { screen = Screen.Home }
+                    )
+                }
+                screen is Screen.OfflineSignIn -> {
+                    BackHandler { screen = Screen.AccountChooser }
+                    OfflineSignInScreen(
+                        onContinue = { username ->
+                            accountRepository.addOrUpdateLocalAccount(username)
+                            screen = Screen.Home
+                        },
+                        onCancel = { screen = Screen.AccountChooser }
+                    )
+                }
                 else -> HomeScreen(
                     activeAccount = accountRepository.activeAccount(),
                     activeProfile = profile,
                     installedMods = installedMods,
                     onPlayClick = { screen = Screen.LaunchPreview },
                     onEditProfileClick = { screen = Screen.EditProfile },
-                    onManageAccountsClick = { screen = Screen.MicrosoftSignIn },
+                    onManageAccountsClick = { screen = Screen.AccountChooser },
                     onWardrobeClick = { notBuiltYet(context, "Wardrobe") },
                     onSettingsClick = { screen = Screen.Settings },
                     onToggleMod = { mod, enabled ->

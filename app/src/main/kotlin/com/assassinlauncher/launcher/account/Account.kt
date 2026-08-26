@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.UUID
 
 enum class AccountType { MICROSOFT, LOCAL }
 
@@ -98,6 +99,37 @@ class AccountRepository(context: Context) {
      * this app run. Null means "needs to sign in again" - there is
      * deliberately no persisted fallback (see field comment above). */
     fun sessionFor(accountId: String): MinecraftSession? = activeSessions[accountId]
+
+    /** Local/offline account - no real authentication, for development so
+     * reinstalling doesn't require a real Microsoft sign-in every time.
+     * The UUID is deterministic from the username
+     * (UUID.nameUUIDFromBytes("OfflinePlayer:$username")), the same
+     * scheme vanilla offline-mode servers use, so the same name always
+     * maps to the same UUID/world data. The access token is a placeholder
+     * the game never actually validates in offline mode - not a real
+     * credential, nothing sensitive to protect by keeping it in memory
+     * only, but stored the same way as the Microsoft session regardless
+     * for one consistent code path in GameLaunchOrchestrator. */
+    fun addOrUpdateLocalAccount(username: String): Account {
+        val uuid = UUID.nameUUIDFromBytes("OfflinePlayer:$username".toByteArray(Charsets.UTF_8)).toString()
+        val current = listAccounts().toMutableList()
+        val existingIndex = current.indexOfFirst { it.id == uuid }
+        val account = Account(
+            id = uuid,
+            username = username,
+            type = AccountType.LOCAL,
+            skinUrl = null
+        )
+        if (existingIndex >= 0) current[existingIndex] = account else current.add(account)
+        activeAccountId = account.id
+        activeSessions[account.id] = MinecraftSession(
+            accessToken = "offline",
+            expiresInSeconds = Int.MAX_VALUE,
+            xuid = null
+        )
+        save(current)
+        return account
+    }
 
     private fun save(accounts: List<Account>) {
         val array = JSONArray()
