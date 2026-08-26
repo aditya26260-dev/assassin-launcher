@@ -28,14 +28,27 @@ data class Account(
 class AccountRepository(context: Context) {
 
     private val storeFile = File(context.filesDir, "accounts.json")
-    private var activeAccountId: String? = null
 
-    // In-memory only, keyed by account id - same reasoning as the refresh
-    // token above, extended to the Minecraft access token: it's what the
-    // game actually launches with, and it doesn't survive app restart.
-    // A launch attempted after a restart (no entry here) needs a fresh
-    // sign-in, not a silently broken/offline launch.
-    private val activeSessions = mutableMapOf<String, MinecraftSession>()
+    companion object {
+        // Moved from per-instance fields into a companion object -
+        // GameLaunchOrchestrator constructs its own AccountRepository(context),
+        // separate from whatever instance the sign-in screen used to call
+        // addOrUpdateMicrosoftAccount(). As instance fields, that meant the
+        // orchestrator's sessionFor() always looked at its own empty map,
+        // reporting "Session expired" immediately after every real sign-in,
+        // regardless of how recent it was. Confirmed directly from the
+        // accountRepository.sessionFor() call site in GameLaunchOrchestrator,
+        // not guessed. Still in-memory only, still gone on app restart -
+        // that part of the tradeoff described below is unchanged.
+        private var activeAccountId: String? = null
+
+        // In-memory only, keyed by account id - same reasoning as the refresh
+        // token above, extended to the Minecraft access token: it's what the
+        // game actually launches with, and it doesn't survive app restart.
+        // A launch attempted after a restart (no entry here) needs a fresh
+        // sign-in, not a silently broken/offline launch.
+        private val activeSessions = mutableMapOf<String, MinecraftSession>()
+    }
 
     fun listAccounts(): List<Account> {
         if (!storeFile.exists()) return emptyList()
