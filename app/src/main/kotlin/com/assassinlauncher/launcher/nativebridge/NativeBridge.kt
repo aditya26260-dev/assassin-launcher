@@ -9,6 +9,16 @@ package com.assassinlauncher.launcher.nativebridge
  */
 object NativeBridge {
     init {
+        // libjli.so (extracted at runtime from the AngelAuraMC JDK, not
+        // bundled in the APK) depends on libc++_shared.so, which that JDK
+        // archive doesn't ship - confirmed by listing the actual archive
+        // contents, not assumed. Loading it here, from the app's own
+        // bundled copy (see the ANDROID_STL=c++_shared build.gradle.kts
+        // change), makes it available to the dynamic linker process-wide
+        // before anything later dlopens libjli.so from its own separate
+        // files/runtimes/ path - the linker resolves an already-loaded
+        // soname regardless of which directory asked for it next.
+        System.loadLibrary("c++_shared")
         System.loadLibrary("assassinlauncher_native")
     }
 

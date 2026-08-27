@@ -21,6 +21,15 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++20"
+                // Unset, this defaults to the static STL, which means no
+                // libc++_shared.so ever gets bundled into the APK at all -
+                // confirmed the AngelAuraMC JDK archive itself doesn't ship
+                // one either (checked the actual jre25-android-arm64.tar.xz
+                // contents directly), so libjli.so's dlopen for it had
+                // nowhere to find it. This produces the .so; see
+                // NativeBridge's init block for the other half (loading it
+                // before libjli.so needs it).
+                arguments += "-DANDROID_STL=c++_shared"
             }
         }
     }
