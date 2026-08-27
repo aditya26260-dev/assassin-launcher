@@ -3,13 +3,17 @@
 #include <csignal>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
 #include <unistd.h>
 #include <vector>
+#include <string>
+#include <thread>
 #include <android/log.h>
 
 #define LOG_TAG "AssassinJvmLauncher"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define STDIO_LOG_TAG "MinecraftJvmOutput"
 
 // JLI_Launch's real signature - confirmed against Amethyst's actual
 // jre_launcher.c (PojavLauncher lineage), not assumed from memory alone.
@@ -31,6 +35,48 @@ typedef jint(JNICALL *JLI_Launch_t)(
         jboolean cpwildcard,
         jboolean javaw,
         jint ergo);
+
+// The embedded JVM's own stdout/stderr - including whatever it prints
+// when it calls abort() internally, which is usually the actual reason -
+// go to this process's real fd 1/2, which nothing was reading. Silently
+// lost every time, which is exactly what made the last SIGABRT
+// undiagnosable: the handler below logs that an abort happened, but not
+// why. This redirects both into logcat instead, via a pipe and a
+// detached reader thread, called before JLI_Launch can print anything.
+// Standard technique for an embedded-JVM-on-Android situation like this
+// one, not exotic - leaving it unredirected was the actual gap.
+static void redirectStdioToLogcat() {
+    int pipeFds[2];
+    if (pipe(pipeFds) != 0) {
+        LOGE("Failed to create stdio redirect pipe: %s", strerror(errno));
+        return;
+    }
+    dup2(pipeFds[1], STDOUT_FILENO);
+    dup2(pipeFds[1], STDERR_FILENO);
+    close(pipeFds[1]);
+
+    int readFd = pipeFds[0];
+    std::thread([readFd]() {
+        char buffer[1024];
+        std::string pending;
+        ssize_t bytesRead;
+        while ((bytesRead = read(readFd, buffer, sizeof(buffer) - 1)) > 0) {
+            buffer[bytesRead] = '\0';
+            pending += buffer;
+            size_t newlinePos;
+            while ((newlinePos = pending.find('\n')) != std::string::npos) {
+                std::string line = pending.substr(0, newlinePos);
+                if (!line.empty()) {
+                    __android_log_write(ANDROID_LOG_INFO, STDIO_LOG_TAG, line.c_str());
+                }
+                pending.erase(0, newlinePos + 1);
+            }
+        }
+        if (!pending.empty()) {
+            __android_log_write(ANDROID_LOG_INFO, STDIO_LOG_TAG, pending.c_str());
+        }
+    }).detach();
+}
 
 // The JVM raises SIGABRT on a fatal internal error rather than a catchable
 // exception. Unhandled, Android just silently kills the whole process -
@@ -117,6 +163,7 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
 
     signal(SIGABRT, handleJvmAbort);
     signal(SIGPIPE, SIG_IGN); // a closed game-log pipe shouldn't kill the whole VM
+    redirectStdioToLogcat();
 
     LOGI("Calling JLI_Launch, argc=%d, fullversion=%s", argc, fullVersion);
     jint exitCode = jliLaunch(
