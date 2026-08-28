@@ -93,6 +93,24 @@ class GameSessionService : Service() {
                 )
             ).path
 
+            // Temporary - every input to this decision, made visible rather
+            // than inferred, since reasoning about it from source alone
+            // couldn't explain an observed Krypton Wrapper selection on
+            // hardware that clearly qualifies for MobileGlues. Remove once
+            // that's actually explained.
+            android.util.Log.i(
+                "RenderPathDecision",
+                "minecraftVersion=${profile.minecraftVersion} " +
+                    "isAtLeast1_17=${profile.isAtLeast1_17()} " +
+                    "isAtMost1_16_5=${profile.isAtMost1_16_5()} " +
+                    "mobileGluesLoadable=${device.mobileGluesLoadable} " +
+                    "kryptonWrapperLoadable=${device.kryptonWrapperLoadable} " +
+                    "glesVersion=${device.glesVersionMajor}.${device.glesVersionMinor} " +
+                    "meetsMobileGluesFloor=${device.meetsMobileGluesFloor()} " +
+                    "manualOverride=${profile.manualRendererOverride} " +
+                    "selectedPath=$renderPath"
+            )
+
             GameLaunchOrchestrator(this@GameSessionService)
                 .launch(profile, device, renderPath)
                 .collect { outcome ->
