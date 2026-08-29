@@ -162,8 +162,8 @@ class GameLaunchOrchestrator(private val context: Context) {
         val classpath = libraryDownloader.buildClasspath(libraryFiles + lwjglJarFiles, clientJarFile)
 
         emit(LaunchOutcome.Progress(LaunchStage.PreparingRenderer))
-        prepareRenderEnvironment(renderPath, device)
         setCoreEnvironment(runtimeRoot, profile)
+        prepareRenderEnvironment(renderPath, device)
 
         val instanceDir = instanceDirs.instanceDir(profile.id)
         val substitutions = mapOf(
@@ -296,22 +296,21 @@ class GameLaunchOrchestrator(private val context: Context) {
 
         when (renderPath) {
             is RenderPath.MobileGlues -> {
+                // LIBGL_ES has to be set before tryLoad() below, not after -
+                // tryLoad() is what dlopens the library, and Krypton
+                // Wrapper's own native init code (which reads this via
+                // getenv()) runs synchronously as part of that call. The
+                // previous version of this fix set the value correctly but
+                // after tryLoad() had already run, so the library never
+                // actually saw it - genuine bug, not a wrong value.
+                Os.setenv("LIBGL_ES", "2", true)
+                android.util.Log.i("AssassinJvmLauncher", "LIBGL_ES set to ${Os.getenv("LIBGL_ES")} before MobileGlues tryLoad()")
                 mobileGluesManager.tryLoad()
                 Os.setenv("MG_DIR_PATH", mobileGluesManager.dataDir.absolutePath, true)
-                // Confirmed straight from Amethyst's JREUtils.java, not
-                // guessed: "envMap.put(\"LIBGL_ES\", \"2\"); // Krypton
-                // Wrapper crashes with 1" - this project never set
-                // LIBGL_ES at all, leaving it at gl4es's own internal
-                // default, quite possibly the exact value that comment
-                // warns about. MobileGlues invokes Krypton Wrapper
-                // internally on this device (confirmed in logcat), so
-                // this applies here even though MobileGlues itself was
-                // the selected RenderPath, not KryptonWrapper directly.
-                Os.setenv("LIBGL_ES", "2", true)
             }
             is RenderPath.KryptonWrapper -> {
+                Os.setenv("LIBGL_ES", "2", true) // must precede tryLoad() - see MobileGlues branch above
                 kryptonWrapperManager.tryLoad()
-                Os.setenv("LIBGL_ES", "2", true) // same fix as the MobileGlues branch above
             }
             is RenderPath.ZinkOverTurnip -> {
                 matchingTurnipVariant()?.let { turnipDriverManager.tryLoad(it) }
@@ -341,17 +340,17 @@ class GameLaunchOrchestrator(private val context: Context) {
             ).joinToString(":"),
             true
         )
-        // The following are confirmed straight from Amethyst's actual
-        // JREUtils.setJavaEnvironment (not guessed): unconditional, set
-        // for every launch regardless of which renderer ends up active.
-        // POJAV_NATIVEDIR - the patched LWJGL/renderer-init code reads
-        // this directly by name; LD_LIBRARY_PATH containing the same
-        // directory isn't a substitute for that specific lookup.
+        // Confirmed straight from Amethyst's actual JREUtils.setJavaEnvironment,
+        // not guessed: unconditional, set for every launch regardless of
+        // which renderer ends up active. POJAV_NATIVEDIR - the patched
+        // LWJGL/renderer-init code reads this directly by name;
+        // LD_LIBRARY_PATH containing the same directory isn't a substitute
+        // for that specific lookup.
         Os.setenv("POJAV_NATIVEDIR", context.applicationInfo.nativeLibraryDir, true)
-        // Real, named gl4es-family fixes per Amethyst's own comments -
-        // log ballooning from error-reporting mods, a shader overload
-        // hack that fails on certain GLES drivers, and a banner/sheep
-        // white-color bug present since GL4ES 1.1.5.
+        // Real, named gl4es-family fixes per Amethyst's own comments - log
+        // ballooning from error-reporting mods, a shader overload hack that
+        // fails on certain GLES drivers, and a banner/sheep white-color bug
+        // present since GL4ES 1.1.5.
         Os.setenv("LIBGL_NOERROR", "1", true)
         Os.setenv("LIBGL_NOINTOVLHACK", "1", true)
         Os.setenv("LIBGL_NORMALIZE", "1", true)
