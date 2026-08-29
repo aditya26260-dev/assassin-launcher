@@ -6,19 +6,25 @@
 
 package com.assassinlauncher.launcher.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -46,6 +52,8 @@ fun GameProfileEditorScreen(
     onBack: () -> Unit
 ) {
     var name by remember(profile.id) { mutableStateOf(profile.name) }
+    var minecraftVersion by remember(profile.id) { mutableStateOf(profile.minecraftVersion) }
+    var showVersionPicker by remember { mutableStateOf(false) }
     var loaderVersion by remember(profile.id) { mutableStateOf(profile.loaderVersion ?: "") }
     var advancedExpanded by remember { mutableStateOf(false) }
     var ramMb by remember(profile.id) { mutableStateOf(profile.ramAllocationMb ?: 2048) }
@@ -62,6 +70,7 @@ fun GameProfileEditorScreen(
 
     fun currentProfile() = profile.copy(
         name = name,
+        minecraftVersion = minecraftVersion,
         loaderVersion = loaderVersion.ifBlank { null },
         ramAllocationMb = ramMb,
         jvmArgsOverride = jvmArgs.ifBlank { null },
@@ -91,6 +100,27 @@ fun GameProfileEditorScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = minecraftVersion,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Minecraft version") },
+                    trailingIcon = {
+                        Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // Overlay rather than relying on the field's own click
+                // handling - readOnly still leaves text-field-specific
+                // touch/focus behavior in the way of a clean single tap.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { showVersionPicker = true }
+                )
+            }
 
             OutlinedTextField(
                 value = name,
@@ -205,6 +235,14 @@ fun GameProfileEditorScreen(
                 }
             }
         }
+    }
+
+    if (showVersionPicker) {
+        MinecraftVersionPickerDialog(
+            currentVersion = minecraftVersion,
+            onVersionSelected = { minecraftVersion = it },
+            onDismiss = { showVersionPicker = false }
+        )
     }
 }
 
