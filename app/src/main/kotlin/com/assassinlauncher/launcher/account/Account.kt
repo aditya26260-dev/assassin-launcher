@@ -1,6 +1,12 @@
 package com.assassinlauncher.launcher.account
 
 import android.content.Context
+import android.util.Base64
+import com.google.crypto.tink.Aead
+import com.google.crypto.tink.KeyTemplates
+import com.google.crypto.tink.RegistryConfiguration
+import com.google.crypto.tink.aead.AeadConfig
+import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -18,17 +24,33 @@ data class Account(
 /**
  * Persists account profiles (username, UUID, skin URL - none of it
  * sensitive) as plain JSON, same pattern as everything else in this
- * project. Deliberately NOT persisting the Microsoft refresh token here -
- * that's a real credential (it can silently re-authenticate as the user
- * indefinitely until revoked), and storing it in plain preferences/JSON
- * would be a real security gap, not a shortcut worth taking. Signing in
- * again each app restart is the honest tradeoff until proper encrypted
- * storage (androidx.security's EncryptedSharedPreferences or equivalent)
- * gets added - stated here rather than silently storing it insecurely.
+ * project.
+ *
+ * The Minecraft session (access token) is now ALSO persisted, encrypted
+ * with Tink's AEAD primitive backed by the Android Keystore - not
+ * androidx.security's EncryptedSharedPreferences, which Google deprecated
+ * (April 2025, security-crypto 1.1.0-alpha07) in favor of using Tink
+ * directly. Deliberately still NOT persisting the Microsoft refresh
+ * token - that's a real credential that can silently re-authenticate as
+ * the user indefinitely until revoked, a materially bigger risk than a
+ * short-lived Minecraft access token, and not needed to solve the actual
+ * problem (re-signing in on every single app restart during active
+ * development). Plain SharedPreferences rather than DataStore for the
+ * encrypted blob itself - DataStore's own official Tink integration
+ * (androidx.datastore:datastore-tink) is still alpha as of this writing,
+ * and sessionFor() needs to stay synchronous to avoid changing every call
+ * site across the app; encrypting a value before a plain synchronous
+ * SharedPreferences write sidesteps both problems.
  */
 class AccountRepository(context: Context) {
 
     private val storeFile = File(context.filesDir, "accounts.json")
+    private val sessionPrefs = context.getSharedPreferences("encrypted_sessions", Context.MODE_PRIVATE)
+
+    // Null if key setup ever fails on some device - falls back to
+    // in-memory-only behavior (the previous behavior) rather than
+    // crashing the app over a persistence nice-to-have.
+    private val sessionAead: Aead? = runCatching { buildSessionAead(context) }.getOrNull()
 
     companion object {
         // Moved from per-instance fields into a companion object -
@@ -39,15 +61,14 @@ class AccountRepository(context: Context) {
         // reporting "Session expired" immediately after every real sign-in,
         // regardless of how recent it was. Confirmed directly from the
         // accountRepository.sessionFor() call site in GameLaunchOrchestrator,
-        // not guessed. Still in-memory only, still gone on app restart -
-        // that part of the tradeoff described below is unchanged.
+        // not guessed.
         private var activeAccountId: String? = null
 
-        // In-memory only, keyed by account id - same reasoning as the refresh
-        // token above, extended to the Minecraft access token: it's what the
-        // game actually launches with, and it doesn't survive app restart.
-        // A launch attempted after a restart (no entry here) needs a fresh
-        // sign-in, not a silently broken/offline launch.
+        // In-memory cache, keyed by account id - checked first since it's
+        // free once populated. No longer the only copy: sessionFor() below
+        // falls back to the encrypted persistent copy and repopulates this
+        // on a hit, so a session survives app restart without every caller
+        // needing to change.
         private val activeSessions = mutableMapOf<String, MinecraftSession>()
     }
 
@@ -78,8 +99,9 @@ class AccountRepository(context: Context) {
     }
 
     /** Called after a real Microsoft sign-in completes. Stores the
-     * profile to disk and keeps the session (access token) in memory for
-     * this app run - see the field comment above for why. */
+     * profile to disk and the session both in memory and, encrypted, to
+     * disk - see the class doc comment above for why this is safe to
+     * persist now when it previously wasn't. */
     fun addOrUpdateMicrosoftAccount(profile: MinecraftProfile, session: MinecraftSession) {
         val current = listAccounts().toMutableList()
         val existingIndex = current.indexOfFirst { it.id == profile.uuid }
@@ -92,13 +114,22 @@ class AccountRepository(context: Context) {
         if (existingIndex >= 0) current[existingIndex] = account else current.add(account)
         activeAccountId = account.id
         activeSessions[account.id] = session
+        persistSession(account.id, session)
         save(current)
     }
 
-    /** The in-memory Minecraft session for an account, if it signed in
-     * this app run. Null means "needs to sign in again" - there is
-     * deliberately no persisted fallback (see field comment above). */
-    fun sessionFor(accountId: String): MinecraftSession? = activeSessions[accountId]
+    /** Checks the in-memory cache first (free once populated), then falls
+     * back to the encrypted persistent copy - populating the in-memory
+     * cache on a hit so the disk read only happens once per app run per
+     * account, not on every call. Null means genuinely no session
+     * anywhere: never signed in, or the persisted copy failed to decrypt
+     * (corrupted, tampered with, or a Keystore key that stopped being
+     * valid - all treated the same as "needs to sign in again" rather
+     * than crashing). */
+    fun sessionFor(accountId: String): MinecraftSession? {
+        activeSessions[accountId]?.let { return it }
+        return loadPersistedSession(accountId)?.also { activeSessions[accountId] = it }
+    }
 
     /** Local/offline account - no real authentication, for development so
      * reinstalling doesn't require a real Microsoft sign-in every time.
@@ -122,13 +153,52 @@ class AccountRepository(context: Context) {
         )
         if (existingIndex >= 0) current[existingIndex] = account else current.add(account)
         activeAccountId = account.id
-        activeSessions[account.id] = MinecraftSession(
+        val session = MinecraftSession(
             accessToken = "offline",
             expiresInSeconds = Int.MAX_VALUE,
             xuid = null
         )
+        activeSessions[account.id] = session
+        persistSession(account.id, session)
         save(current)
         return account
+    }
+
+    private fun persistSession(accountId: String, session: MinecraftSession) {
+        val aead = sessionAead ?: return
+        runCatching {
+            val json = JSONObject().apply {
+                put("accessToken", session.accessToken)
+                put("expiresInSeconds", session.expiresInSeconds)
+                put("xuid", session.xuid ?: "")
+            }
+            val ciphertext = aead.encrypt(json.toString().toByteArray(Charsets.UTF_8), accountId.toByteArray())
+            sessionPrefs.edit().putString(accountId, Base64.encodeToString(ciphertext, Base64.DEFAULT)).apply()
+        }
+        // A failure here just means this sign-in stays in-memory-only for
+        // this run, same as before this feature existed - not worth
+        // surfacing to the caller over what's already a best-effort
+        // convenience layer on top of working in-memory session state.
+    }
+
+    private fun loadPersistedSession(accountId: String): MinecraftSession? {
+        val aead = sessionAead ?: return null
+        val encoded = sessionPrefs.getString(accountId, null) ?: return null
+        return runCatching {
+            val ciphertext = Base64.decode(encoded, Base64.DEFAULT)
+            // accountId as associated data - the same value used to
+            // encrypt must be supplied to decrypt, which also means a
+            // ciphertext can't silently be swapped to answer for a
+            // different account id than the one it was actually stored
+            // under.
+            val plaintext = aead.decrypt(ciphertext, accountId.toByteArray())
+            val json = JSONObject(String(plaintext, Charsets.UTF_8))
+            MinecraftSession(
+                accessToken = json.getString("accessToken"),
+                expiresInSeconds = json.getInt("expiresInSeconds"),
+                xuid = json.optString("xuid").ifBlank { null }
+            )
+        }.getOrNull()
     }
 
     private fun save(accounts: List<Account>) {
@@ -145,4 +215,22 @@ class AccountRepository(context: Context) {
         }
         storeFile.writeText(array.toString())
     }
+}
+
+/** One Keystore-backed key, generated on first use and reused after -
+ * AndroidKeysetManager persists the (Keystore-wrapped, not plaintext)
+ * keyset itself in its own small SharedPreferences file and handles
+ * reading it back on subsequent calls. KeyTemplates.get("AES256_GCM") is
+ * the current Tink API - not the older AeadKeyTemplates.AES256_GCM or
+ * PredefinedAeadParameters.AES256_GCM forms of the same template seen in
+ * older examples. */
+private fun buildSessionAead(context: Context): Aead {
+    AeadConfig.register()
+    val keysetHandle = AndroidKeysetManager.Builder()
+        .withSharedPref(context.applicationContext, "assassin_session_keyset", "assassin_session_keyset_prefs")
+        .withKeyTemplate(KeyTemplates.get("AES256_GCM"))
+        .withMasterKeyUri("android-keystore://assassin_launcher_session_master_key")
+        .build()
+        .keysetHandle
+    return keysetHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
 }
