@@ -65,7 +65,22 @@ class JvmRuntimeManager(private val context: Context) {
         withContext(Dispatchers.IO) {
             runCatching {
                 val binary = javaBinary(version)
-                if (binary.exists()) return@runCatching binary
+                if (binary.exists()) {
+                    // Confirmed from the actual downloaded JDK archive
+                    // that bin/java is stored as -rwxr-xr-x, and that
+                    // extractTar's chmod logic below is correct - but
+                    // that logic only ever runs on first extraction.
+                    // A binary already sitting on disk from any earlier
+                    // extraction (including by an older version of this
+                    // same function, before this exact chmod logic was
+                    // written) would keep whatever permissions it
+                    // originally got, forever, since this whole branch
+                    // is skipped on a cache hit. Re-applying here is
+                    // cheap and idempotent, and removes that entire
+                    // class of "silently stuck non-executable" bug.
+                    binary.setExecutable(true, false)
+                    return@runCatching binary
+                }
 
                 val targetDir = runtimeDir(version)
                 targetDir.mkdirs()
