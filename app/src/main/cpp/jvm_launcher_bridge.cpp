@@ -165,6 +165,19 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
     signal(SIGPIPE, SIG_IGN); // a closed game-log pipe shouldn't kill the whole VM
     redirectStdioToLogcat();
 
+    // Confirmed straight from Amethyst's actual JREUtils.launchJavaVM, not
+    // guessed: it calls chdir() to the game directory immediately before
+    // launching, and this project has never called chdir() anywhere.
+    // "Current folder is:/" - root, not any real game directory - has been
+    // sitting in every single crash log this entire investigation.
+    // Reusing HOME rather than adding a new parameter - GameLaunchOrchestrator
+    // already sets it to this exact same directory, and ensures it exists
+    // (chdir fails outright otherwise) right before calling this function.
+    const char *homeDir = getenv("HOME");
+    if (homeDir != nullptr && chdir(homeDir) != 0) {
+        LOGE("chdir to HOME (%s) failed: %s", homeDir, strerror(errno));
+    }
+
     LOGI("Calling JLI_Launch, argc=%d, fullversion=%s", argc, fullVersion);
     jint exitCode = jliLaunch(
             argc, argv.data(),

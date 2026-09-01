@@ -221,15 +221,6 @@ class GameLaunchOrchestrator(private val context: Context) {
         }
 
         val (fullVersion, dotVersion) = jdkVersionStrings(javaRuntime)
-        // Confirmed straight from Amethyst's actual JREUtils.launchJavaVM,
-        // not guessed: it calls chdir() to the game directory immediately
-        // before launching, and this project has never called chdir()
-        // anywhere. "Current folder is:/" - root, not any real game
-        // directory - has been sitting in every single crash log this
-        // entire investigation. Same directory already used for HOME
-        // above, matching Amethyst's own pattern of using the game
-        // directory for both.
-        Os.chdir(instanceDirs.instanceDir(profile.id).apply { mkdirs() }.absolutePath)
         NativeBridge.launchEmbeddedJvm(
             jliLibraryPath = File(runtimeRoot, "lib/libjli.so").absolutePath,
             args = fullArgs.toTypedArray(),
@@ -338,7 +329,11 @@ class GameLaunchOrchestrator(private val context: Context) {
 
     private fun setCoreEnvironment(runtimeRoot: File, profile: GameProfile) {
         Os.setenv("JAVA_HOME", runtimeRoot.absolutePath, true)
-        Os.setenv("HOME", instanceDirs.instanceDir(profile.id).absolutePath, true)
+        // mkdirs() here matters more than usual now - the native launch
+        // code chdir()s into this exact directory (read back via
+        // getenv("HOME")) right before calling JLI_Launch, and chdir()
+        // fails outright if the target doesn't already exist.
+        Os.setenv("HOME", instanceDirs.instanceDir(profile.id).apply { mkdirs() }.absolutePath, true)
         Os.setenv("TMPDIR", context.cacheDir.absolutePath, true)
         Os.setenv(
             "LD_LIBRARY_PATH",
