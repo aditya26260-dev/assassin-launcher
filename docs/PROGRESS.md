@@ -1891,4 +1891,251 @@ Recommended as a **private** repo specifically so this doesn't conflict
 with the standing "no repo until it's working" call - Actions works the
 same either way, and flipping visibility later is a one-click change.
 
+## Repo went public; auth, offline accounts, version picker, session
+## persistence - then a long, ultimately unresolved renderer crash, and
+## the decision to stop reimplementing the engine and fork Amethyst's
+
+A lot happened this session. Recording it in full rather than
+compressed, since the next session needs the real trail, not just the
+conclusion - especially for the crash investigation at the end, which
+matters more for what didn't work than what did.
+
+**The repo (`aditya26260-dev/assassin-launcher`) is public**, not
+private as previously recommended - found out mid-session, not this
+session's decision to change.
+
+**Microsoft sign-in now genuinely completes end to end.** The
+`isXalRedirect` WebView fallback and the RpsTicket fix both actually
+work - confirmed on a real device, real profile name (`Assassinn1`)
+returned. Two real bugs got found and fixed to get here:
+- A `git diff` misread cost an entire round: the `isXalRedirect` fix
+  from a prior session's zip had never actually been committed, and
+  telling Aditya to `git checkout --` the file (based on a backwards
+  reading of which side of the diff was which) discarded the only copy
+  of it. Re-derived and reapplied directly from live GitHub content,
+  not the stale zip, this time.
+- `RpsTicket` was sent as `"d=$msAccessToken"` - the modern-OAuth2
+  convention. Amethyst's actual working code
+  (`MicrosoftBackgroundLogin.java`) sends it completely unprefixed for
+  this legacy `login.live.com` flow. Confirmed by grepping Aditya's
+  local Amethyst-Android clone directly, not assumed.
+
+**Offline account support added.** `AccountChooserScreen` +
+`OfflineSignInScreen`, `AccountRepository.addOrUpdateLocalAccount()`.
+UUID is `UUID.nameUUIDFromBytes("OfflinePlayer:$username")`, the same
+scheme real offline-mode servers use. Exists specifically so
+development doesn't require a real Microsoft sign-in on every reinstall.
+
+**Minecraft version picker added.** `GameProfileEditorScreen` had no way
+to change the game version at all - "Latest Release" was hardcoded, the
+only editable field was "Loader version" (mod loader, not game version).
+New `MinecraftVersionPickerDialog` - full-screen rather than a dropdown
+(Mojang's real manifest has hundreds of entries once snapshots are
+included), search + release/snapshot toggle, reuses the existing
+`MinecraftVersionClient` rather than duplicating the fetch.
+
+**Minecraft session now persists across app restarts.** Previously
+in-memory only, by design, with a comment explaining the security
+reasoning - real annoyance during a session with this many reinstalls.
+`androidx.security:security-crypto`/`EncryptedSharedPreferences` was the
+obvious choice but is **deprecated** (April 2025, stuck at
+1.1.0-alpha07, no longer maintained). Current real guidance is Tink's
+`Aead` primitive directly, Keystore-backed. Used it directly against
+plain `SharedPreferences` rather than DataStore's own Tink integration
+(`androidx.datastore:datastore-tink`), which is itself still alpha, and
+because `sessionFor()` needed to stay synchronous for every existing
+call site. The Microsoft refresh token still isn't persisted -
+deliberate, real risk difference between a long-lived credential and a
+short-lived access token, not an oversight. New dependency:
+`com.google.crypto.tink:tink-android`, sourced carefully but not
+test-compiled directly (no way to compile in this session's sandbox) -
+worth an extra look if anything in `Account.kt`'s crypto path ever
+throws.
+
+**Small real bugs fixed along the way**: two stale, unpatched LWJGL jars
+(`lwjgl-opengl.jar`, `lwjgl-glfw.jar`) sitting alongside the correct
+`lwjgl-3.3.3-merged-modules.jar` in assets - a prior session found and
+vendored the right one but never removed the old two, so the classpath
+carried duplicate/conflicting LWJGL classes. First-launch screen's
+Continue button could be pushed below the visible screen on some
+devices/font-scales - the checklist `Column` had no scroll. Account
+session state was scoped to instance fields instead of a companion
+object - `GameLaunchOrchestrator` constructs its own
+`AccountRepository(context)`, separate from whatever instance the
+sign-in screen used, so a signed-in session was invisible to it.
+`GameArgumentBuilder.kt`'s `TOKEN_REGEX` used backslash-escaped braces
+that Android's ICU-backed regex engine (not desktop Java's) rejected
+outright - crashed the app before any launch attempt could even start.
+Fixed with single-character classes (`[{]`/`[}]`) instead, which every
+regex engine treats identically.
+
+## Next action (from that point)
+Auth and version selection both real and working. Actual game launch
+was the next real test - Play had never been tried since the auth fix
+landed.
+
+## The renderer crash - seven real attempts, still unresolved
+
+Tapping Play got real, meaningful distance: JVM provisioning, library
+downloading, `JLI_Launch` all completing successfully with real
+argument counts and a real JDK version string. The failure is
+specifically in the renderer, and specifically only when Krypton
+Wrapper's code runs - confirmed via `RenderPathSelector`'s own decision
+log that **MobileGlues is what actually gets selected**; Krypton
+Wrapper's `"Initialising Krypton Wrapper..."` output starts
+*immediately after* MobileGlues' own log lines, meaning MobileGlues
+invokes it internally as its own legacy-GL fallback rather than it being
+this project's own renderer choice. Traced the entire real call chain
+(`HomeScreen` → `MainActivity` → `LaunchPreviewScreen` →
+`GameSessionService` → `RenderPathSelector` → `DeviceProfiler` →
+`MobileGluesManager`) to confirm this - every piece of that chain is
+correct on its own.
+
+The actual failure, byte for byte, every single attempt:
+```
+Current folder is:/
+Permission denied
+Error: trying to exec [...]/files/runtimes/jre25/bin/java.
+Check if file exists and permissions are set correctly.
+FORTIFY: pthread_mutex_lock called on a destroyed mutex
+SIGABRT
+```
+Krypton Wrapper's own code, at some point after initializing, tries to
+`exec()` `bin/java` as a genuinely separate process (not the in-process
+`JLI_Launch` embedding this whole architecture is built around), gets
+denied, and aborts. This exact text does not appear anywhere in
+`libmobileglues.so`, `libng_gl4es.so`, or the patched LWJGL jar's class
+files (checked directly via `strings`/binary grep on the actual vendored
+files, not assumed) - wherever it's constructed, it isn't a single
+static string in any of those three.
+
+**Seven real, evidence-based fixes, in order, none of them sufficient
+alone**:
+1. Removed the two duplicate/stale LWJGL jars (above) - real bug,
+   necessary, not sufficient.
+2. `LIBGL_ES=2` - confirmed via Amethyst's actual `JREUtils.java`:
+   `envMap.put("LIBGL_ES", "2"); // Krypton Wrapper crashes with 1`. This
+   project never set it at all. First attempt set it *after*
+   `mobileGluesManager.tryLoad()` - too late, since that call is what
+   actually dlopens the library and triggers Krypton Wrapper's own init
+   synchronously. Reordered so `setCoreEnvironment()` runs before
+   `prepareRenderEnvironment()`, and moved the env var above `tryLoad()`
+   within the branch. Confirmed via a direct logcat readback
+   (`Os.getenv("LIBGL_ES")` right after setting it) that it really is
+   `2` at the right moment. Crashed identically anyway.
+3. Also added, same pass, all confirmed from the same source:
+   `POJAV_NATIVEDIR` (the patched renderer-init code reads this by name;
+   `LD_LIBRARY_PATH` containing the same directory isn't a substitute),
+   `LIBGL_NOERROR`, `LIBGL_NOINTOVLHACK`, `LIBGL_NORMALIZE`,
+   `LIBGL_MIPMAP=3`.
+4. `JvmRuntimeManager.ensureAvailable()` only re-applies the executable
+   bit on first extraction, never on a cache hit - a `bin/java` extracted
+   by any earlier version of the code stays whatever it was, forever,
+   since the whole extraction branch is skipped once the file exists.
+   Verified this wasn't the archive's fault first (`tar -tvJf` on the
+   real downloaded JDK archive: `bin/java` is genuinely stored
+   `-rwxr-xr-x`). Made the chmod idempotent - re-applied even on cache
+   hit. Also checked and ruled out an SELinux/seccomp explanation
+   directly: Aditya captured `avc: denied` output around the exact crash
+   timestamp, and there is no execute-denial for this app anywhere in
+   it, unlike other real apps in the same log - ruling out one whole
+   category of "no config could ever fix this" explanation.
+5. `chdir()` - confirmed from Amethyst's actual `JREUtils.launchJavaVM`:
+   it `chdir()`s to the game directory immediately before launching, and
+   `"Current folder is:/"` (root, not any real directory) has been in
+   every single crash log this whole investigation. First attempt used
+   `android.system.Os.chdir()` from Kotlin - doesn't exist, real compile
+   error, caught via the actual CI failure log rather than shipped
+   blind. Moved to plain native `chdir()` in `jvm_launcher_bridge.cpp`
+   (already has `<unistd.h>`), reading back the same `HOME` env var
+   already being set from Kotlin.
+6. Full comparison against Amethyst's actual native launcher
+   (`jre_launcher.c`, not just the Java side) found three more real,
+   confirmed differences: `cpwildcard` was `JNI_FALSE`, backwards from
+   Amethyst's `JNI_TRUE`; `lname` was hardcoded `"openjdk"` where
+   Amethyst uses `argv[0]` (`"java"`) for both `pname` and `lname`; and
+   Amethyst resets *every* signal from `SIGHUP` to `NSIG` to its default
+   disposition (`SIGSEGV` specifically to `SIG_IGN`) immediately before
+   calling `JLI_Launch` - this project never touched signal dispositions
+   beyond its own `SIGABRT` handler at all. Ported all three - the
+   signal reset via plain `signal()` in a loop rather than
+   `sigaction()`/`struct sigaction`, since `<csignal>` wasn't confirmed
+   to expose the latter and `signal()` was already proven working in
+   this exact file.
+
+**All seven were real, confirmed against either direct evidence
+(logcat readback, the actual downloaded archive, the actual `avc` log)
+or Amethyst's own real, working source - not guesses, not other
+projects' documentation. The crash persisted, identically, through
+every single one.**
+
+One thread flagged but never followed up on, worth the next session
+checking first if this gets picked back up in this form: MobileGlues'
+own log output includes `"Unsupported launcher detected, force using
+default config."` - implying real launcher-detection logic exists, and
+that *recognized* launchers get different (possibly
+exec-avoiding) config that this project, being unrecognized, never
+receives. Never traced what that check actually looks for.
+
+## Decision: stop reimplementing the engine, fork Amethyst's instead
+
+After the seventh attempt, Aditya made the call directly: stop trying to
+build and debug a competing implementation of the JVM-launch/rendering
+engine, and use Amethyst's actual, proven one instead - forked, not
+just referenced. Reasoning, in his own terms: this is years of
+multi-contributor, real-device-tested work (already independently
+confirmed true earlier this session, from Amethyst's own recent release
+notes), this project has no team or playerbase to sustain competing with
+that, and the real place to differentiate is UI, features, and
+optimization on top of a working engine - not the engine itself.
+
+**This is the standing direction now, not a one-off experiment.**
+Whatever session picks this up should treat "get a working engine from
+Amethyst" as the active plan, not revisit whether to attempt it.
+
+**Confirmed before committing to an approach**: Amethyst is Java, using
+traditional Android Views/XML - not Kotlin, not Compose. A literal
+"clone Amethyst as the new repo base" would mean abandoning every UI,
+account, and feature Aditya has actually built, which is explicitly not
+the goal ("we still have other places to shine like ui and
+optimization"). The real plan is porting Amethyst's specific
+engine-room logic - JVM launch, renderer preparation, native bridges -
+translated to Kotlin and adapted into this project's existing
+architecture, while every UI/feature layer stays exactly as it is.
+
+**Real progress already made on this, this session, before running out
+of runway**: read Amethyst's actual `JREUtils.java` (renderer selection,
+full environment setup, the `LOCAL_RENDERER` switch, the `LIBGL_ES`
+logic) and `jre_launcher.c` (the real native `JLI_Launch` wrapper) in
+detail, and ported everything confirmed different into this project's
+own `jvm_launcher_bridge.cpp` (see attempts 5 and 6 above). That work is
+real and should stay - it just wasn't sufficient on its own, meaning the
+remaining gap is somewhere this session didn't reach.
+
+## Next action
+Two concrete, unstarted threads for whoever picks this up:
+1. **MobileGlues' own launcher-detection check** (the "Unsupported
+   launcher detected" message) - never traced. Could be the actual
+   remaining piece, and would be a small, targeted fix rather than more
+   engine porting if it is.
+2. **Amethyst's actual Surface/EGL bridge** - the piece that gets real
+   rendered frames onto an Android `Surface`. This project has never
+   reached that point at all; every attempt so far has crashed *before*
+   any real rendering was attempted. `jre_launcher.c` covers JVM launch
+   specifically, not this - there's a separate native file (or files)
+   in Amethyst's `app_pojavlauncher/src/main/jni/` for this that this
+   session never got to. Given how much was ported from the launch side
+   without resolving the crash, this - or something adjacent to it, like
+   whatever sets up the environment *between* JVM launch and the
+   renderer actually starting - is the more likely place the real,
+   still-missing difference lives.
+
+Read this whole crash section before proposing an eighth fix to the
+current approach. If continuing to port pieces of Amethyst's engine one
+comparison at a time hasn't worked in seven real, well-evidenced
+attempts, the next session's default should be a larger, more complete
+pass (or reconsidering whether a piece needs to be adopted essentially
+wholesale, e.g. `libpojavexec.so` itself, rather than reimplemented in
+this project's own native code even after translation) rather than an
+eighth incremental one.
 
