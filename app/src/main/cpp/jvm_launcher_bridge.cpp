@@ -161,6 +161,31 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
     const char *fullVersion = env->GetStringUTFChars(fullVersionJ, nullptr);
     const char *dotVersion = env->GetStringUTFChars(dotVersionJ, nullptr);
 
+    // Confirmed straight from Amethyst's actual jre_launcher.c, not
+    // guessed: before calling JLI_Launch, it resets every signal from
+    // SIGHUP to NSIG back to its default disposition (SIGSEGV
+    // specifically to SIG_IGN - their own comment notes Android
+    // specifically checks for that exact value). This project never did
+    // this at all, leaving every signal however Android's own runtime
+    // happened to leave it. HotSpot's own stack-overflow detection
+    // depends on SIGSEGV being in a known, clean state before it installs
+    // its own handler - if it isn't, a JVM-internal self-recovery attempt
+    // (which is exactly what an exec of its own java binary looks like)
+    // is a real, plausible consequence, not a stretch.
+    //
+    // Amethyst does this via sigaction()/struct sigaction; using plain
+    // signal() here instead for the identical result (reset to SIG_DFL,
+    // SIGSEGV to SIG_IGN - no need for anything sigaction-specific like
+    // SA_RESTART) with an API this exact file has already proven works,
+    // rather than introducing struct sigaction on a header (<csignal>)
+    // that isn't confirmed to expose it.
+    for (int sigId = SIGHUP; sigId < NSIG; sigId++) {
+        signal(sigId, (sigId == SIGSEGV) ? SIG_IGN : SIG_DFL);
+    }
+    // Our own handling layered on top afterward, same order Amethyst
+    // itself uses for its own abort handling ("Only set the sigactions
+    // *after* we have already set up" - their comment, same reasoning
+    // applies here).
     signal(SIGABRT, handleJvmAbort);
     signal(SIGPIPE, SIG_IGN); // a closed game-log pipe shouldn't kill the whole VM
     redirectStdioToLogcat();
@@ -184,8 +209,15 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
             0, nullptr,
             0, nullptr,
             fullVersion, dotVersion,
-            "java", "openjdk",
-            JNI_FALSE, JNI_FALSE, JNI_FALSE, JNI_FALSE);
+            // Confirmed straight from Amethyst's jre_launcher.c: both
+            // pname and lname are *margv (argv[0], "java") - not two
+            // different hardcoded strings. lname="openjdk" here before
+            // this fix was never verified against anything real.
+            // cpwildcard was JNI_FALSE, backwards from Amethyst's
+            // JNI_TRUE - a real, direct parameter mismatch, not a
+            // stylistic difference.
+            argv[0], argv[0],
+            JNI_FALSE, JNI_TRUE, JNI_FALSE, JNI_FALSE);
     LOGI("JLI_Launch returned %d (see the comment above - this line may "
          "never actually execute)", exitCode);
 
