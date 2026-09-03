@@ -131,6 +131,7 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
         jstring fullVersionJ, jstring dotVersionJ) {
 
     const char *jliLibraryPath = env->GetStringUTFChars(jliLibraryPathJ, nullptr);
+    std::string jliLibraryPathStr(jliLibraryPath); // copied before release; needed below for LD_LIBRARY_PATH
     // Already loaded by an earlier dlopenJvmLibrary call, in dependency
     // order; re-opening the same path is a refcount bump that hands back
     // the existing handle, not a second real load.
@@ -140,6 +141,38 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
     if (jliHandle == nullptr) {
         LOGE("libjli.so not loaded - cannot resolve JLI_Launch: %s", dlerror());
         return -1;
+    }
+
+    // Confirmed by extracting strings from our own downloaded jre25 libjli.so
+    // directly: it contains "LD_LIBRARY_PATH=%s:%s/lib" and the exact text of
+    // our crash ("Error: trying to exec %s.\nCheck if file exists and
+    // permissions are set correctly."). This is libjli.so's OWN internal
+    // launcher logic (matches real OpenJDK bug JDK-8208372) - it checks
+    // whether LD_LIBRARY_PATH already covers this runtime's own lib
+    // directory, and if not, builds a new value and re-execs argv[0] (which
+    // we pass below as bin/java's own path) to apply it from a clean process
+    // start. Android refuses to execve() a file sitting in this app's own
+    // private storage, so that always fails with EACCES - "Permission
+    // denied" in the crash log. Not Krypton Wrapper, not MobileGlues - both
+    // fully ruled out by reading their real source directly (zero exec/fork
+    // calls in either, across both full repos). Setting this ourselves,
+    // matching what libjli would have set anyway, means its own check finds
+    // the environment already correct and never decides to re-exec. We
+    // already dlopen every JDK library manually in dependency order, so this
+    // doesn't change how anything loads - it only satisfies JLI_Launch's own
+    // internal check.
+    size_t lastSlash = jliLibraryPathStr.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        std::string libDir = jliLibraryPathStr.substr(0, lastSlash); // ".../lib"
+        std::string newLdPath = libDir + ":" + libDir + "/server";
+        const char *existingLdPath = getenv("LD_LIBRARY_PATH");
+        if (existingLdPath != nullptr && existingLdPath[0] != '\0') {
+            newLdPath = std::string(existingLdPath) + ":" + newLdPath;
+        }
+        setenv("LD_LIBRARY_PATH", newLdPath.c_str(), 1);
+        LOGI("Set LD_LIBRARY_PATH to %s", newLdPath.c_str());
+    } else {
+        LOGE("Could not derive lib directory from jliLibraryPath: %s", jliLibraryPathStr.c_str());
     }
 
     auto jliLaunch = reinterpret_cast<JLI_Launch_t>(dlsym(jliHandle, "JLI_Launch"));
