@@ -171,6 +171,12 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
         }
         setenv("LD_LIBRARY_PATH", newLdPath.c_str(), 1);
         LOGI("Set LD_LIBRARY_PATH to %s", newLdPath.c_str());
+        // Confirmed present in this exact libjli.so via strings: setting this
+        // unlocks the launcher's own internal tracing (including a
+        // "mustsetenv: %s" line that states outright whether it thinks a
+        // re-exec is needed, and "JRE path is %s" showing what it resolved).
+        // Reading its own diagnosis beats guessing at the exact check further.
+        setenv("_JAVA_LAUNCHER_DEBUG", "1", 1);
     } else {
         LOGE("Could not derive lib directory from jliLibraryPath: %s", jliLibraryPathStr.c_str());
     }
