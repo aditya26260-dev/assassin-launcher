@@ -164,10 +164,19 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
     size_t lastSlash = jliLibraryPathStr.find_last_of('/');
     if (lastSlash != std::string::npos) {
         std::string libDir = jliLibraryPathStr.substr(0, lastSlash); // ".../lib"
-        std::string newLdPath = libDir + ":" + libDir + "/server";
+        // Amethyst's real JREUtils.setJavaEnvironment() confirms the actual rule:
+        // it isn't "does LD_LIBRARY_PATH contain the right directory anywhere" -
+        // it's "is the directory that actually holds libjvm.so (lib/server here,
+        // per jvm.cfg's '-server KNOWN') the FIRST entry." Their code builds
+        // jvmLibraryPath (".../server") and prepends it ahead of everything else,
+        // including their own base LD_LIBRARY_PATH. Our first attempt put plain
+        // lib/ first instead of lib/server/ - that's why mustsetenv stayed TRUE
+        // even with both directories already present, just in the wrong order.
+        std::string serverDir = libDir + "/server"; // where libjvm.so actually lives
+        std::string newLdPath = serverDir + ":" + libDir;
         const char *existingLdPath = getenv("LD_LIBRARY_PATH");
         if (existingLdPath != nullptr && existingLdPath[0] != '\0') {
-            newLdPath = std::string(existingLdPath) + ":" + newLdPath;
+            newLdPath = newLdPath + ":" + std::string(existingLdPath);
         }
         setenv("LD_LIBRARY_PATH", newLdPath.c_str(), 1);
         LOGI("Set LD_LIBRARY_PATH to %s", newLdPath.c_str());
