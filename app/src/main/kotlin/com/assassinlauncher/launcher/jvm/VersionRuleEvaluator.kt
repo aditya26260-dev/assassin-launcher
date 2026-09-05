@@ -29,10 +29,23 @@ object VersionRuleEvaluator {
 
     private const val CURRENT_OS = "linux"
 
+    // Real manifests only ever gate on arch for legacy x86/x86_64 desktop
+    // quirks (e.g. -Xss1M's {"os":{"arch":"x86"}}) - none of those apply to
+    // this arm64-only Android project, so this deliberately never matches.
+    private const val CURRENT_ARCH = "arm64"
+
     fun isAllowed(rules: JSONArray?, activeFeatures: Map<String, Boolean> = emptyMap()): Boolean {
         if (rules == null || rules.length() == 0) return true
 
-        var result = true
+        // A present (non-empty) rules array makes this value conditional:
+        // exclude it unless some rule actually grants "allow" for the
+        // current platform. Verified against the real crash: values whose
+        // only rule is {"os":{"name":"osx"}} (-XstartOnFirstThread) or
+        // {"os":{"name":"windows"}} (HeapDumpPath) were reaching the JVM on
+        // Android because a default of true meant an unmatched rule left
+        // the value included instead of excluding it - the last-applicable-
+        // rule-wins logic never got a chance to run when nothing applied.
+        var result = false
         for (i in 0 until rules.length()) {
             val rule = rules.getJSONObject(i)
             val action = rule.optString("action", "allow")
@@ -43,7 +56,13 @@ object VersionRuleEvaluator {
                 true
             } else {
                 val osName = osObject.optString("name", "")
-                osName.isBlank() || osName == CURRENT_OS
+                val osArch = osObject.optString("arch", "")
+                // Previously checked only "name" - {"os":{"arch":"x86"}}
+                // (no "name" key) fell through as blank/unconstrained and
+                // always matched, which is how -Xss1M reached an arm64
+                // device despite being gated to x86 specifically.
+                (osName.isBlank() || osName == CURRENT_OS) &&
+                    (osArch.isBlank() || osArch == CURRENT_ARCH)
             }
 
             // A feature not present in activeFeatures is treated as "not
