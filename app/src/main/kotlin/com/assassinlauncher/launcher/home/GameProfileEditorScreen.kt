@@ -34,13 +34,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.assassinlauncher.launcher.hardware.ManualRendererOverride
 import com.assassinlauncher.launcher.instance.GameProfile
+import com.assassinlauncher.launcher.jvm.VersionContentProvisioner
 import com.assassinlauncher.launcher.ui.theme.launcherSwitchColors
+import kotlinx.coroutines.launch
 
 private val availableJavaRuntimes = listOf("Auto", "Java 8", "Java 17", "Java 21", "Java 25")
 
@@ -50,6 +54,8 @@ fun GameProfileEditorScreen(
     onSave: (GameProfile) -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var name by remember(profile.id) { mutableStateOf(profile.name) }
     var minecraftVersion by remember(profile.id) { mutableStateOf(profile.minecraftVersion) }
     var showVersionPicker by remember { mutableStateOf(false) }
@@ -239,7 +245,17 @@ fun GameProfileEditorScreen(
     if (showVersionPicker) {
         MinecraftVersionPickerDialog(
             currentVersion = minecraftVersion,
-            onVersionSelected = { minecraftVersion = it },
+            onVersionSelected = { selected ->
+                minecraftVersion = selected
+                // Starts the moment a version is picked, per how this is
+                // supposed to work - not deferred until the whole form is
+                // saved. Idempotent (see VersionContentProvisioner's own
+                // doc comment), so re-picking the same version, or later
+                // saving the profile, are both safe no-ops on top of this.
+                coroutineScope.launch {
+                    VersionContentProvisioner(context).ensureVersionContent(selected)
+                }
+            },
             onDismiss = { showVersionPicker = false }
         )
     }
