@@ -52,16 +52,17 @@ sealed class LaunchOutcome {
  * provisioning, version parsing, library downloading, the render path
  * decision, and accounts, none of which talked to each other before this.
  *
- * Two real, honestly-scoped gaps this does NOT cover, both noted in
+ * One real, honestly-scoped gap this does NOT cover, noted in
  * docs/PROGRESS.md rather than silently glossed over:
  *  - No asset (textures/sounds/lang) downloading yet - Minecraft will
  *    start with an empty assets directory. Not addressed here; a real,
  *    separate piece of work, not a "next action" for the JVM/classpath
  *    problem this class exists to solve.
- *  - The Android LWJGL native .so files (GLFW replacement, OpenAL) aren't
- *    sourced yet - only the Java-side jars are. The renderer-loading and
- *    JVM library dlopen sequence below is written to be correct once
- *    they exist, and fails gracefully (not silently) without them.
+ *
+ * The Android LWJGL native .so gap this comment used to describe (GLFW's
+ * pojavexec, plus pojavexec_awt and OpenAL) is closed - extracted from
+ * Amethyst's real released APK, same provenance as every other vendored
+ * binary here. See AndroidLwjglProvider's own doc comment.
  *
  * Modloader (Fabric/Forge/etc.) version-JSON inheritance/merging isn't
  * implemented either - this only launches GameProfile.loader ==
@@ -395,11 +396,15 @@ class GameLaunchOrchestrator(private val context: Context) {
             .filter { it.isFile && it.extension == "so" && it.name !in loaded }
             .forEach { NativeBridge.dlopenJvmLibrary(it.absolutePath) }
 
-        // OpenAL is the app's own bundled native, not the JDK's - LWJGL
-        // needs it for audio. Not present yet (see this class's doc
-        // comment); attempted anyway so this starts working the moment
-        // it's bundled, rather than needing this function revisited too.
-        val openAl = File(context.applicationInfo.nativeLibraryDir, "libopenal.so")
+        // OpenAL is one of the vendored LWJGL-family natives (see
+        // AndroidLwjglProvider), extracted to nativesDir alongside
+        // pojavexec/freetype/etc - not the JDK's own lib/, and not
+        // nativeLibraryDir either (this was checking the wrong directory
+        // before the .so actually existed anywhere to test against).
+        // Proactively dlopen'd here for the same reason the JDK's own
+        // libraries are: avoiding relying on the dynamic linker to resolve
+        // it correctly on its own when LWJGL's System.loadLibrary runs.
+        val openAl = File(lwjglProvider.nativesDir, "libopenal.so")
         if (openAl.exists()) NativeBridge.dlopenJvmLibrary(openAl.absolutePath)
 
         return true

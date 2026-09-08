@@ -9,6 +9,8 @@ import com.assassinlauncher.launcher.hardware.DeviceProfiler
 import com.assassinlauncher.launcher.hardware.RenderPathDecision
 import com.assassinlauncher.launcher.hardware.RenderPathRequest
 import com.assassinlauncher.launcher.hardware.RenderPathSelector
+import com.assassinlauncher.launcher.jvm.JavaRuntimeVersion
+import com.assassinlauncher.launcher.jvm.JvmRuntimeManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +25,7 @@ sealed class FirstLaunchStep {
     data object DetectingHardware : FirstLaunchStep()
     data object CheckingVulkanSupport : FirstLaunchStep()
     data object ChoosingRenderPath : FirstLaunchStep()
+    data object PreparingJava : FirstLaunchStep()
     data class Done(val profile: DeviceProfile, val decision: RenderPathDecision) :
         FirstLaunchStep()
 }
@@ -64,6 +67,21 @@ class FirstLaunchViewModel(application: Application) : AndroidViewModel(applicat
                     turnipBuildAvailable = profile.turnipBuildAvailable
                 )
             )
+
+            _step.value = FirstLaunchStep.PreparingJava
+            // Not version-specific - one JRE serves every instance, unlike
+            // the library/client-jar download (see VersionContentProvisioner,
+            // triggered instead from instance creation). JAVA_21 covers the
+            // default "Latest Release" profile this app creates on first
+            // run; an instance needing a different major (older versions,
+            // or a manual override) still provisions its own at Play time
+            // exactly as it does today - this just covers the common case
+            // early. Best-effort: a failure here isn't shown as a blocking
+            // error, since GameLaunchOrchestrator's own ProvisioningJvm
+            // stage will retry this exact idempotent call at Play time.
+            runCatching {
+                JvmRuntimeManager(context).ensureAvailable(JavaRuntimeVersion.JAVA_21)
+            }
 
             DeviceProfileStore.save(context, profile)
             _step.value = FirstLaunchStep.Done(profile, decision)

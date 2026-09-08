@@ -38,6 +38,7 @@ import com.assassinlauncher.launcher.home.LaunchPreviewScreen
 import com.assassinlauncher.launcher.instance.GameProfile
 import com.assassinlauncher.launcher.instance.InstanceDirectoryManager
 import com.assassinlauncher.launcher.instance.InstanceRepository
+import com.assassinlauncher.launcher.jvm.VersionContentProvisioner
 import com.assassinlauncher.launcher.mods.ContentManagerScreen
 import com.assassinlauncher.launcher.mods.InstalledMod
 import com.assassinlauncher.launcher.mods.ModManagerScreen
@@ -156,7 +157,15 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
                         profile = profile,
                         onSave = { updated ->
                             activeProfile = updated
-                            coroutineScope.launch { instanceRepository.saveProfile(updated) }
+                            coroutineScope.launch {
+                                instanceRepository.saveProfile(updated)
+                                // Fire-and-forget: idempotent (skips anything
+                                // already downloaded), and GameLaunchOrchestrator
+                                // still does the same checks at Play time as a
+                                // fallback, so a failure here isn't user-facing -
+                                // see VersionContentProvisioner's own doc comment.
+                                VersionContentProvisioner(context).ensureVersionContent(updated.minecraftVersion)
+                            }
                         },
                         onBack = { screen = Screen.Home }
                     )

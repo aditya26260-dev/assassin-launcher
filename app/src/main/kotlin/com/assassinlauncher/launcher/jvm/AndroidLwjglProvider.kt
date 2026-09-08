@@ -30,6 +30,13 @@ import java.io.File
  * way the source repo's dev-time files did, and that's the proven
  * combination this project now uses rather than a guessed recombination.
  *
+ * Correction to the paragraph above: that extraction pass was incomplete,
+ * not closed. libpojavexec.so, libpojavexec_awt.so, and libopenal.so were
+ * missing from natives/ despite the claim - found only when GLFW's own
+ * clinit crashed on System.loadLibrary("pojavexec") at actual runtime, not
+ * by re-checking the extraction itself. All three now come from the same
+ * APK, same arm64-v8a directory, added alongside the rest.
+ *
  * Only covers LWJGL3 (Minecraft 1.13+, Mojang group "org.lwjgl"). Older
  * versions use LWJGL2 ("org.lwjgl.lwjgl") and aren't handled - there's no
  * vendored Android build of it in hand, and this project's scope so far
