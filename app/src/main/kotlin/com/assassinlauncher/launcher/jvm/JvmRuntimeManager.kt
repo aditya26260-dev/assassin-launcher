@@ -18,14 +18,8 @@ enum class JavaRuntimeVersion(val majorVersion: Int) {
     JAVA_25(25)
 }
 
-/**
- * Real JVM provisioning per architecture 5.2. Downloads from AngelAuraMC's
- * actual GitHub Releases, the same permanent, stable source confirmed
- * directly in Amethyst Launcher's own live code (NewJREUtil.java) - not
- * their CI's ephemeral build artifacts, which expire. Extraction uses the
- * same library combination (Apache Commons Compress + its XZ codec) their
- * real, working code uses, confirmed rather than guessed at.
- */
+/** Java 21 ships bundled in the app; other majors still download from
+ * AngelAuraMC's releases on first use. */
 class JvmRuntimeManager(private val context: Context) {
 
     private val client = OkHttpClient()
@@ -52,32 +46,18 @@ class JvmRuntimeManager(private val context: Context) {
     fun isAvailableLocally(version: JavaRuntimeVersion): Boolean =
         javaBinary(version).exists()
 
-    /** Downloads and extracts the runtime if it isn't already present
-     * locally. Returns the path to the java binary itself. Real network
-     * call and real tar.xz extraction - genuinely untested against a live
-     * download, no working network in this sandbox, same caveat as the
-     * Modrinth and Microsoft auth clients. The four runtimes actually
-     * supplied for this project were verified by extracting them directly
-     * in the sandbox with system tar/xz (real JDK structure confirmed,
-     * bin/java present, release file confirms real version strings) - the
-     * extraction logic below is written to match that confirmed structure. */
+    private fun bundledAssetPath(version: JavaRuntimeVersion): String? = when (version) {
+        JavaRuntimeVersion.JAVA_21 -> "runtimes/jre21-android-arm64.tar.xz"
+        else -> null
+    }
+
+    /** Extracts from the bundled asset if there is one for this version,
+     * otherwise downloads. Returns the java binary path. */
     suspend fun ensureAvailable(version: JavaRuntimeVersion): Result<File> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val binary = javaBinary(version)
                 if (binary.exists()) {
-                    // Confirmed from the actual downloaded JDK archive
-                    // that bin/java is stored as -rwxr-xr-x, and that
-                    // extractTar's chmod logic below is correct - but
-                    // that logic only ever runs on first extraction.
-                    // A binary already sitting on disk from any earlier
-                    // extraction (including by an older version of this
-                    // same function, before this exact chmod logic was
-                    // written) would keep whatever permissions it
-                    // originally got, forever, since this whole branch
-                    // is skipped on a cache hit. Re-applying here is
-                    // cheap and idempotent, and removes that entire
-                    // class of "silently stuck non-executable" bug.
                     binary.setExecutable(true, false)
                     return@runCatching binary
                 }
@@ -85,17 +65,28 @@ class JvmRuntimeManager(private val context: Context) {
                 val targetDir = runtimeDir(version)
                 targetDir.mkdirs()
 
-                val request = Request.Builder().url(downloadUrl(version)).build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        throw IOException(
-                            "Failed to download Java ${version.majorVersion}: HTTP ${response.code}"
-                        )
+                val assetPath = bundledAssetPath(version)
+                if (assetPath != null) {
+                    context.assets.open(assetPath).use { assetStream ->
+                        XZCompressorInputStream(assetStream).use { xzStream ->
+                            TarArchiveInputStream(xzStream).use { tarStream ->
+                                extractTar(tarStream, targetDir)
+                            }
+                        }
                     }
-                    val body = response.body ?: throw IOException("Empty response body")
-                    XZCompressorInputStream(body.byteStream()).use { xzStream ->
-                        TarArchiveInputStream(xzStream).use { tarStream ->
-                            extractTar(tarStream, targetDir)
+                } else {
+                    val request = Request.Builder().url(downloadUrl(version)).build()
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            throw IOException(
+                                "Failed to download Java ${version.majorVersion}: HTTP ${response.code}"
+                            )
+                        }
+                        val body = response.body ?: throw IOException("Empty response body")
+                        XZCompressorInputStream(body.byteStream()).use { xzStream ->
+                            TarArchiveInputStream(xzStream).use { tarStream ->
+                                extractTar(tarStream, targetDir)
+                            }
                         }
                     }
                 }

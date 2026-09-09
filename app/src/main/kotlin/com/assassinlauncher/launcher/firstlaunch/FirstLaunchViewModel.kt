@@ -9,26 +9,22 @@ import com.assassinlauncher.launcher.hardware.DeviceProfiler
 import com.assassinlauncher.launcher.hardware.RenderPathDecision
 import com.assassinlauncher.launcher.hardware.RenderPathRequest
 import com.assassinlauncher.launcher.hardware.RenderPathSelector
-import com.assassinlauncher.launcher.jvm.JavaRuntimeVersion
-import com.assassinlauncher.launcher.jvm.JvmRuntimeManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * Real steps, not a generic spinner - architecture 6.1 asks for "one
- * satisfying, honest progress flow, not a black box", so this tracks what's
- * actually happening rather than faking a progress percentage.
- */
 sealed class FirstLaunchStep {
     data object DetectingHardware : FirstLaunchStep()
     data object CheckingVulkanSupport : FirstLaunchStep()
     data object ChoosingRenderPath : FirstLaunchStep()
-    data object PreparingJava : FirstLaunchStep()
+    data object SavingProfile : FirstLaunchStep()
     data class Done(val profile: DeviceProfile, val decision: RenderPathDecision) :
         FirstLaunchStep()
 }
+
+private const val STEP_PACING_MS = 550L
 
 class FirstLaunchViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -45,21 +41,15 @@ class FirstLaunchViewModel(application: Application) : AndroidViewModel(applicat
 
             _step.value = FirstLaunchStep.DetectingHardware
             val profile = DeviceProfiler.profile(context)
+            delay(STEP_PACING_MS)
 
             _step.value = FirstLaunchStep.CheckingVulkanSupport
-            // The Vulkan check already happened as part of profile() above -
-            // this step exists so the UI can show it as its own honest beat
-            // rather than folding two real steps into one line.
+            delay(STEP_PACING_MS)
 
             _step.value = FirstLaunchStep.ChoosingRenderPath
             val decision = RenderPathSelector.select(
                 RenderPathRequest(
                     device = profile,
-                    // First-launch detection isn't tied to a specific
-                    // instance yet, so this uses the most common case
-                    // (modern Minecraft, Vulkan on) to give a real answer
-                    // to show here - actual per-instance decisions happen
-                    // again at launch time with that instance's real context.
                     minecraftSupportsNativeVulkan = true,
                     vulkanToggleEnabled = true,
                     minecraftAtMost1_16_5 = false,
@@ -67,23 +57,12 @@ class FirstLaunchViewModel(application: Application) : AndroidViewModel(applicat
                     turnipBuildAvailable = profile.turnipBuildAvailable
                 )
             )
+            delay(STEP_PACING_MS)
 
-            _step.value = FirstLaunchStep.PreparingJava
-            // Not version-specific - one JRE serves every instance, unlike
-            // the library/client-jar download (see VersionContentProvisioner,
-            // triggered instead from instance creation). JAVA_21 covers the
-            // default "Latest Release" profile this app creates on first
-            // run; an instance needing a different major (older versions,
-            // or a manual override) still provisions its own at Play time
-            // exactly as it does today - this just covers the common case
-            // early. Best-effort: a failure here isn't shown as a blocking
-            // error, since GameLaunchOrchestrator's own ProvisioningJvm
-            // stage will retry this exact idempotent call at Play time.
-            runCatching {
-                JvmRuntimeManager(context).ensureAvailable(JavaRuntimeVersion.JAVA_21)
-            }
-
+            _step.value = FirstLaunchStep.SavingProfile
             DeviceProfileStore.save(context, profile)
+            delay(STEP_PACING_MS)
+
             _step.value = FirstLaunchStep.Done(profile, decision)
         }
     }

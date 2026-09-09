@@ -49,12 +49,12 @@ fun OfflineSignInScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Play Offline",
+                text = "Add an offline profile",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "No sign-in, no ownership check - local testing only. 3-16 letters, numbers, or underscores.",
+                text = "Pick a name for this profile. It won't need its own Microsoft sign-in, since you're already signed in. Use 3 to 16 letters, numbers, or underscores.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp, bottom = 24.dp)

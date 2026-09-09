@@ -114,6 +114,7 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
     var firstLaunchDone by remember { mutableStateOf<Boolean?>(null) }
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     var activeProfile by remember { mutableStateOf<GameProfile?>(null) }
+    var accountsVersion by remember { mutableStateOf(0) }
     var deviceProfile by remember { mutableStateOf<DeviceProfile?>(null) }
     var installedMods by remember { mutableStateOf<List<InstalledMod>>(emptyList()) }
 
@@ -222,6 +223,7 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
                                 result.result.profile,
                                 result.result.minecraftSession
                             )
+                            accountsVersion++
                             screen = Screen.Home
                         },
                         onCancel = { screen = Screen.Home }
@@ -229,9 +231,20 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
                 }
                 screen is Screen.AccountChooser -> {
                     BackHandler { screen = Screen.Home }
+                    accountsVersion // read so this branch recomposes after a change below
                     AccountChooserScreen(
-                        onChooseMicrosoft = { screen = Screen.MicrosoftSignIn },
-                        onChooseOffline = { screen = Screen.OfflineSignIn },
+                        accounts = accountRepository.listAccounts(),
+                        activeAccountId = accountRepository.activeAccount()?.id,
+                        onSelectAccount = { account ->
+                            accountRepository.setActiveAccount(account.id)
+                            accountsVersion++
+                        },
+                        onRemoveAccount = { account ->
+                            accountRepository.removeAccount(account.id)
+                            accountsVersion++
+                        },
+                        onAddMicrosoft = { screen = Screen.MicrosoftSignIn },
+                        onAddOffline = { screen = Screen.OfflineSignIn },
                         onCancel = { screen = Screen.Home }
                     )
                 }
@@ -240,6 +253,7 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
                     OfflineSignInScreen(
                         onContinue = { username ->
                             accountRepository.addOrUpdateLocalAccount(username)
+                            accountsVersion++
                             screen = Screen.Home
                         },
                         onCancel = { screen = Screen.AccountChooser }

@@ -98,6 +98,16 @@ class AccountRepository(context: Context) {
         }
     }
 
+    fun removeAccount(accountId: String) {
+        val remaining = listAccounts().filterNot { it.id == accountId }
+        save(remaining)
+        activeSessions.remove(accountId)
+        sessionPrefs.edit().remove(accountId).apply()
+        if (activeAccountId == accountId) {
+            activeAccountId = remaining.firstOrNull()?.id
+        }
+    }
+
     /** Called after a real Microsoft sign-in completes. Stores the
      * profile to disk and the session both in memory and, encrypted, to
      * disk - see the class doc comment above for why this is safe to
