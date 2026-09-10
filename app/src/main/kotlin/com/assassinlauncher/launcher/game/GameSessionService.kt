@@ -53,8 +53,25 @@ class GameSessionService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    // JLI_Launch is not safe to call twice in one process, even from two
+    // different threads - libjli.so has no expectation of ever running
+    // concurrently with itself. Without this, backing out of
+    // LaunchPreviewScreen mid-launch and tapping Play again starts a
+    // second onStartCommand on this same still-alive service while the
+    // first launch coroutine is still in flight, and both eventually race
+    // to call JLI_Launch on the same process - exactly what a corrupted,
+    // double-printed _JAVA_LAUNCHER_DEBUG dump with a garbage option array
+    // looks like.
+    @Volatile
+    private var launchInProgress = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
+
+        if (launchInProgress) {
+            return START_NOT_STICKY
+        }
+        launchInProgress = true
 
         val profileId = intent?.getStringExtra(EXTRA_PROFILE_ID)
         if (profileId == null) {
@@ -62,6 +79,7 @@ class GameSessionService : Service() {
                 LaunchStage.ResolvingAccount,
                 "No profile specified"
             )
+            launchInProgress = false
             stopSelf()
             return START_NOT_STICKY
         }
@@ -76,6 +94,7 @@ class GameSessionService : Service() {
                     LaunchStage.ResolvingAccount,
                     if (profile == null) "Profile not found" else "Device not yet profiled - run first launch setup"
                 )
+                launchInProgress = false
                 stopSelf()
                 return@launch
             }
@@ -115,7 +134,10 @@ class GameSessionService : Service() {
                 .launch(profile, device, renderPath)
                 .collect { outcome ->
                     _launchState.value = outcome
-                    if (outcome is LaunchOutcome.Failed) stopSelf()
+                    if (outcome is LaunchOutcome.Failed) {
+                        launchInProgress = false
+                        stopSelf()
+                    }
                 }
         }
 
@@ -123,6 +145,7 @@ class GameSessionService : Service() {
     }
 
     override fun onDestroy() {
+        launchInProgress = false
         serviceScope.cancel()
         super.onDestroy()
     }

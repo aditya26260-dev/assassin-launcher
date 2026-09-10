@@ -38,6 +38,7 @@ import com.assassinlauncher.launcher.home.LaunchPreviewScreen
 import com.assassinlauncher.launcher.instance.GameProfile
 import com.assassinlauncher.launcher.instance.InstanceDirectoryManager
 import com.assassinlauncher.launcher.instance.InstanceRepository
+import com.assassinlauncher.launcher.game.GameSessionService
 import com.assassinlauncher.launcher.jvm.VersionContentProvisioner
 import com.assassinlauncher.launcher.mods.ContentManagerScreen
 import com.assassinlauncher.launcher.mods.InstalledMod
@@ -145,11 +146,17 @@ fun AppRoot(instanceRepository: InstanceRepository, accountRepository: AccountRe
             when {
                 profile == null || device == null -> LoadingPlaceholder()
                 screen is Screen.LaunchPreview -> {
-                    BackHandler { screen = Screen.Home }
+                    BackHandler {
+                        GameSessionService.stop(context)
+                        screen = Screen.Home
+                    }
                     LaunchPreviewScreen(
                         profile = profile,
                         device = device,
-                        onBack = { screen = Screen.Home }
+                        onBack = {
+                            GameSessionService.stop(context)
+                            screen = Screen.Home
+                        }
                     )
                 }
                 screen is Screen.EditProfile -> {

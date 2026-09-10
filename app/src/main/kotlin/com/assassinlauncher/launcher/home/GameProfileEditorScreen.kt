@@ -11,14 +11,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -46,6 +50,8 @@ import com.assassinlauncher.launcher.jvm.VersionContentProvisioner
 import com.assassinlauncher.launcher.ui.theme.launcherSwitchColors
 import kotlinx.coroutines.launch
 
+private enum class DownloadStatus { Idle, Downloading, Ready, Failed }
+
 private val availableJavaRuntimes = listOf("Auto", "Java 8", "Java 17", "Java 21", "Java 25")
 
 @Composable
@@ -57,6 +63,7 @@ fun GameProfileEditorScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var name by remember(profile.id) { mutableStateOf(profile.name) }
+    var downloadStatus by remember { mutableStateOf<DownloadStatus>(DownloadStatus.Idle) }
     var minecraftVersion by remember(profile.id) { mutableStateOf(profile.minecraftVersion) }
     var showVersionPicker by remember { mutableStateOf(false) }
     var loaderVersion by remember(profile.id) { mutableStateOf(profile.loaderVersion ?: "") }
@@ -125,6 +132,25 @@ fun GameProfileEditorScreen(
                         .matchParentSize()
                         .clickable { showVersionPicker = true }
                 )
+            }
+
+            when (downloadStatus) {
+                DownloadStatus.Downloading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Downloading this version", style = MaterialTheme.typography.bodySmall)
+                }
+                DownloadStatus.Ready -> Text(
+                    "Ready to play",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                DownloadStatus.Failed -> Text(
+                    "Couldn't download this version, will try again when you play",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                DownloadStatus.Idle -> Unit
             }
 
             OutlinedTextField(
@@ -247,13 +273,10 @@ fun GameProfileEditorScreen(
             currentVersion = minecraftVersion,
             onVersionSelected = { selected ->
                 minecraftVersion = selected
-                // Starts the moment a version is picked, per how this is
-                // supposed to work - not deferred until the whole form is
-                // saved. Idempotent (see VersionContentProvisioner's own
-                // doc comment), so re-picking the same version, or later
-                // saving the profile, are both safe no-ops on top of this.
+                downloadStatus = DownloadStatus.Downloading
                 coroutineScope.launch {
-                    VersionContentProvisioner(context).ensureVersionContent(selected)
+                    val result = VersionContentProvisioner(context).ensureVersionContent(selected)
+                    downloadStatus = if (result.isSuccess) DownloadStatus.Ready else DownloadStatus.Failed
                 }
             },
             onDismiss = { showVersionPicker = false }

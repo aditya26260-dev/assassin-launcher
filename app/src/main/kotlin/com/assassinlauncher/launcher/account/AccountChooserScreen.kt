@@ -91,14 +91,6 @@ fun AccountChooserScreen(
                     }
                 }
             }
-            if (!hasMicrosoftAccount) {
-                Text(
-                    text = "Sign in with Microsoft first to also add an offline profile.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
 
             Spacer(Modifier.height(16.dp))
             TextButton(onClick = onCancel) {
