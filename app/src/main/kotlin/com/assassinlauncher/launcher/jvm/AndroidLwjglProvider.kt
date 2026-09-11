@@ -95,10 +95,8 @@ class AndroidLwjglProvider(private val context: Context) {
         val assetNames = context.assets.list(assetDir)?.filter(filter) ?: return emptyList()
         return assetNames.map { name ->
             val outFile = File(outDir, name)
-            if (!outFile.exists()) {
-                context.assets.open("$assetDir/$name").use { input ->
-                    outFile.outputStream().use { output -> input.copyTo(output) }
-                }
+            context.assets.open("$assetDir/$name").use { input ->
+                outFile.outputStream().use { output -> input.copyTo(output) }
             }
             outFile.absolutePath
         }
