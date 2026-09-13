@@ -91,6 +91,31 @@ class AndroidLwjglProvider(private val context: Context) {
         extractAssetDir(NATIVES_ASSET_DIR, nativesDir) { it.endsWith(".so") }
     }
 
+    /** Loads libpojavexec.so once from the Android side, before the game
+     * JVM ever does. Traced from ZalithLauncher2's real JNI_OnLoad: this
+     * library tracks two separate JavaVM pointers - the first one to call
+     * JNI_OnLoad becomes "the Android app's own VM", and only a second,
+     * different JavaVM* gets saved as "the game's VM" (which is what the
+     * native GLFW bridge init actually needs). If the embedded game JVM is
+     * the only one that ever loads it, it gets wrongly treated as the
+     * first/Android-side VM, and the game-VM slot never gets filled -
+     * matching a real observed crash in nativeInitializeGLFWNativeBridge,
+     * which reads that slot without it ever having been set. Calling
+     * System.load() here once, from the Android app's own VM, first,
+     * establishes that first slot correctly so the game JVM's later load
+     * lands in the second slot as intended. */
+    @Volatile
+    private var pojavexecPreloadedForAndroid = false
+
+    fun preloadPojavexecForAndroidVm() {
+        if (pojavexecPreloadedForAndroid) return
+        val lib = File(nativesDir, "libpojavexec.so")
+        if (lib.exists()) {
+            System.load(lib.absolutePath)
+        }
+        pojavexecPreloadedForAndroid = true
+    }
+
     private fun extractAssetDir(assetDir: String, outDir: File, filter: (String) -> Boolean): List<String> {
         val assetNames = context.assets.list(assetDir)?.filter(filter) ?: return emptyList()
         return assetNames.map { name ->

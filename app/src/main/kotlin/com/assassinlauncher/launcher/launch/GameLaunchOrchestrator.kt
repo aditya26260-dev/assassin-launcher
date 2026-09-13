@@ -160,6 +160,7 @@ class GameLaunchOrchestrator(private val context: Context) {
         }
         val lwjglJarFiles = lwjglProvider.classpathJarPaths().map(::File)
         lwjglProvider.ensureNatives()
+        lwjglProvider.preloadPojavexecForAndroidVm()
         val classpath = libraryDownloader.buildClasspath(libraryFiles + lwjglJarFiles, clientJarFile)
 
         emit(LaunchOutcome.Progress(LaunchStage.PreparingRenderer))
