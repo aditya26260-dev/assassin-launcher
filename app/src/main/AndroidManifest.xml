@@ -44,6 +44,17 @@
                 android:value="Keeps an active Minecraft game session running at full speed while the player is using another app" />
         </service>
 
+        <provider
+            android:name=".storage.AppStorageDocumentsProvider"
+            android:authorities="com.assassinlauncher.launcher.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
     </application>
 
 </manifest>
