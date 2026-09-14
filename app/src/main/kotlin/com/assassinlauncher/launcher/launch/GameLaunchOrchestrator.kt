@@ -16,6 +16,7 @@ import com.assassinlauncher.launcher.instance.ModLoader
 import com.assassinlauncher.launcher.jvm.AndroidLwjglProvider
 import com.assassinlauncher.launcher.jvm.JavaRuntimeVersion
 import com.assassinlauncher.launcher.jvm.JvmRuntimeManager
+import com.assassinlauncher.launcher.settings.LauncherSettingsStore
 import com.assassinlauncher.launcher.jvm.LibraryDownloader
 import com.assassinlauncher.launcher.jvm.MinecraftVersionClient
 import com.assassinlauncher.launcher.jvm.MinecraftVersionDetails
@@ -204,7 +205,11 @@ class GameLaunchOrchestrator(private val context: Context) {
 
         val jvmArgs = GameArgumentBuilder.buildJvmArgs(details, substitutions, activeFeatures)
         val gameArgs = GameArgumentBuilder.buildGameArgs(details, substitutions, activeFeatures)
-        val ramArgs = listOf("-Xms512M", "-Xmx${profile.ramAllocationMb ?: defaultRamMb()}M")
+        val launcherSettings = LauncherSettingsStore.load(context)
+        val ramArgs = listOf(
+            "-Xms512M",
+            "-Xmx${profile.ramAllocationMb ?: launcherSettings.defaultMaxRamMb ?: defaultRamMb()}M"
+        )
         val userJvmArgs = profile.jvmArgsOverride?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
         val lwjglNativeArgs = lwjglNativeArgs(lwjglProvider.nativesDir)
 

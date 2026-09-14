@@ -18,6 +18,7 @@ import com.assassinlauncher.launcher.instance.InstanceRepository
 import com.assassinlauncher.launcher.launch.GameLaunchOrchestrator
 import com.assassinlauncher.launcher.launch.LaunchOutcome
 import com.assassinlauncher.launcher.launch.LaunchStage
+import com.assassinlauncher.launcher.settings.LauncherSettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -99,6 +100,11 @@ class GameSessionService : Service() {
                 return@launch
             }
 
+            val launcherSettings = LauncherSettingsStore.load(this@GameSessionService)
+            if (launcherSettings.showDetailedNotification) {
+                startForeground(NOTIFICATION_ID, buildNotification(profile.name))
+            }
+
             val renderPath = RenderPathSelector.select(
                 RenderPathRequest(
                     device = device,
@@ -109,6 +115,7 @@ class GameSessionService : Service() {
                     turnipBuildAvailable = device.turnipBuildAvailable,
                     forceSystemVulkanDriver = profile.forceSystemVulkanDriver,
                     manualRendererOverride = profile.manualRendererOverride
+                        ?: launcherSettings.defaultRendererOverride
                 )
             ).path
 
@@ -152,7 +159,7 @@ class GameSessionService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(profileName: String? = null): Notification {
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -167,7 +174,7 @@ class GameSessionService : Service() {
 
         return NotificationCompat.Builder(this, AssassinLauncherApp.GAME_SESSION_CHANNEL_ID)
             .setContentTitle(getString(R.string.game_session_notification_title))
-            .setContentText(getString(R.string.game_session_notification_text))
+            .setContentText(profileName ?: getString(R.string.game_session_notification_text))
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(contentIntent)
             .setOngoing(true)

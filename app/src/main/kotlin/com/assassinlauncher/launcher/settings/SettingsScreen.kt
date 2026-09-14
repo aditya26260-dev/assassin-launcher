@@ -10,9 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.assassinlauncher.launcher.hardware.DeviceProfile
+import com.assassinlauncher.launcher.hardware.ManualRendererOverride
 import com.assassinlauncher.launcher.input.CursorSettings
 import com.assassinlauncher.launcher.input.CursorSettingsStore
 import com.assassinlauncher.launcher.ui.theme.LauncherTopBar
@@ -44,16 +51,23 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(device: DeviceProfile, onBack: () -> Unit) {
     var showingCredits by remember { mutableStateOf(false) }
     var cursorSettings by remember { mutableStateOf(CursorSettings()) }
+    var launcherSettings by remember { mutableStateOf(LauncherSettings()) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         cursorSettings = CursorSettingsStore.load(context)
+        launcherSettings = LauncherSettingsStore.load(context)
     }
 
     fun updateCursor(update: CursorSettings) {
         cursorSettings = update
         coroutineScope.launch { CursorSettingsStore.save(context, update) }
+    }
+
+    fun updateLauncherSettings(update: LauncherSettings) {
+        launcherSettings = update
+        coroutineScope.launch { LauncherSettingsStore.save(context, update) }
     }
 
     if (showingCredits) {
@@ -96,6 +110,65 @@ fun SettingsScreen(device: DeviceProfile, onBack: () -> Unit) {
                     }
                 )
                 InfoRow("Android version", "API ${device.androidSdkInt}")
+            }
+
+            SettingsSection(title = "Defaults for new instances") {
+                Text(
+                    "A specific instance can still override any of this on its own.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                DefaultRendererDropdown(
+                    selected = launcherSettings.defaultRendererOverride,
+                    onSelected = { updateLauncherSettings(launcherSettings.copy(defaultRendererOverride = it)) }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Use automatic memory allocation", color = MaterialTheme.colorScheme.onBackground)
+                    Switch(
+                        checked = launcherSettings.defaultMaxRamMb == null,
+                        onCheckedChange = { auto ->
+                            updateLauncherSettings(
+                                launcherSettings.copy(defaultMaxRamMb = if (auto) null else 2048)
+                            )
+                        }
+                    )
+                }
+                if (launcherSettings.defaultMaxRamMb != null) {
+                    Text(
+                        "Max memory: ${launcherSettings.defaultMaxRamMb}MB",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Slider(
+                        value = launcherSettings.defaultMaxRamMb!!.toFloat(),
+                        onValueChange = {
+                            updateLauncherSettings(
+                                launcherSettings.copy(defaultMaxRamMb = (it.toInt() / 256) * 256)
+                            )
+                        },
+                        valueRange = 512f..8192f
+                    )
+                }
+            }
+
+            SettingsSection(title = "Notification") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Show which instance is running", color = MaterialTheme.colorScheme.onBackground)
+                    Switch(
+                        checked = launcherSettings.showDetailedNotification,
+                        onCheckedChange = {
+                            updateLauncherSettings(launcherSettings.copy(showDetailedNotification = it))
+                        }
+                    )
+                }
             }
 
             SettingsSection(title = "Cursor") {
@@ -166,19 +239,52 @@ fun SettingsScreen(device: DeviceProfile, onBack: () -> Unit) {
                     Text("Credits and licenses")
                 }
             }
-
-            Text(
-                "Everything else the brief describes for this screen - a full " +
-                    "renderer default, notification options, and the rest of what " +
-                    "other launchers expose here - isn't built yet. Cursor size, " +
-                    "color, and sensitivity above are real; custom PNG cursors " +
-                    "still need an image picker.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             }
         }
     }
+}
+
+@Composable
+private fun DefaultRendererDropdown(
+    selected: ManualRendererOverride?,
+    onSelected: (ManualRendererOverride?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = selected?.let { settingsRendererDisplayName(it.name) } ?: "Auto"
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = label,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Default renderer") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(text = { Text("Auto") }, onClick = {
+                onSelected(null)
+                expanded = false
+            })
+            ManualRendererOverride.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(settingsRendererDisplayName(option.name)) },
+                    onClick = {
+                        onSelected(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun settingsRendererDisplayName(enumName: String): String = when (enumName) {
+    "ZINK_OVER_TURNIP" -> "Zink over Turnip"
+    "MOBILE_GLUES" -> "MobileGlues"
+    "KRYPTON_WRAPPER" -> "Krypton Wrapper"
+    "BASE_GL4ES" -> "GL4ES"
+    else -> enumName
 }
 
 @Composable
