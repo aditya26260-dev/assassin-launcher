@@ -1,8 +1,8 @@
 package org.lwjgl.glfw;
 
 import android.content.res.Resources;
-import androidx.annotation.CriticalNative;
 import androidx.annotation.Keep;
+import dalvik.annotation.optimization.CriticalNative;
 import java.nio.ByteBuffer;
 
 /**
