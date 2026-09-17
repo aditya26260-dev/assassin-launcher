@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.assassinlauncher.launcher.game.GameSessionService
 import com.assassinlauncher.launcher.hardware.DeviceProfile
 import com.assassinlauncher.launcher.instance.GameProfile
+import com.assassinlauncher.launcher.jvm.AndroidLwjglProvider
 import com.assassinlauncher.launcher.launch.LaunchOutcome
 import com.assassinlauncher.launcher.launch.LaunchStage
 import net.kdt.pojavlaunch.utils.JREUtils
@@ -41,11 +42,16 @@ private fun stageLabel(stage: LaunchStage): String = when (stage) {
 /**
  * Hosts the actual game rendering surface and only starts
  * GameSessionService once that surface exists and has been handed to
- * native code via JREUtils.setupBridgeWindow. The embedded JVM's GLFW
- * init reaches for a native window immediately on boot, so the handoff
- * has to happen before JLI_Launch, not after - there was previously
- * nothing anywhere in this app that created a Surface at all, which is
- * what SIGSEGV'd inside ANativeWindow_acquire.
+ * native code via JREUtils.setupBridgeWindow. setupBridgeWindow is
+ * itself implemented by libpojavexec.so, so that library has to be
+ * preloaded first or the call throws UnsatisfiedLinkError - same
+ * AndroidLwjglProvider call GameLaunchOrchestrator makes later, calling
+ * it twice from two separate provider instances is a harmless no-op the
+ * second time. The embedded JVM's GLFW init reaches for a native window
+ * immediately on boot, so all of this has to happen before JLI_Launch,
+ * not after - there was previously nothing anywhere in this app that
+ * created a Surface at all, which is what SIGSEGV'd inside
+ * ANativeWindow_acquire.
  *
  * A launch that actually succeeds ends this app's process when
  * Minecraft closes - see GameSessionService's own doc comment - so the
@@ -70,6 +76,10 @@ fun LaunchPreviewScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidExternalSurface(modifier = Modifier.fillMaxSize()) {
             onSurface { surface, _, _ ->
+                AndroidLwjglProvider(context).also {
+                    it.ensureNatives()
+                    it.preloadPojavexecForAndroidVm()
+                }
                 JREUtils.setupBridgeWindow(surface)
                 if (!hasStartedLaunch) {
                     hasStartedLaunch = true
