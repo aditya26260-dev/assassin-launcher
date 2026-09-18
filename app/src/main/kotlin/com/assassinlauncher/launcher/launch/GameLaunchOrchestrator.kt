@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.system.Os
 import com.assassinlauncher.launcher.account.AccountRepository
+import com.assassinlauncher.launcher.game.GameSessionService
 import com.assassinlauncher.launcher.hardware.DeviceProfile
 import com.assassinlauncher.launcher.hardware.KryptonWrapperManager
 import com.assassinlauncher.launcher.hardware.MobileGluesManager
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import net.kdt.pojavlaunch.utils.JREUtils
 
 sealed class LaunchStage {
     data object ResolvingAccount : LaunchStage()
@@ -162,6 +164,7 @@ class GameLaunchOrchestrator(private val context: Context) {
         val lwjglJarFiles = lwjglProvider.classpathJarPaths().map(::File)
         lwjglProvider.ensureNatives()
         lwjglProvider.preloadPojavexecForAndroidVm()
+        GameSessionService.pendingSurface?.let { JREUtils.setupBridgeWindow(it) }
         val classpath = libraryDownloader.buildClasspath(libraryFiles + lwjglJarFiles, clientJarFile)
 
         emit(LaunchOutcome.Progress(LaunchStage.PreparingRenderer))

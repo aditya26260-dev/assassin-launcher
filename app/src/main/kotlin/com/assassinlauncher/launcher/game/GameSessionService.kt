@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.view.Surface
 import androidx.core.app.NotificationCompat
 import com.assassinlauncher.launcher.AssassinLauncherApp
 import com.assassinlauncher.launcher.MainActivity
@@ -194,6 +195,16 @@ class GameSessionService : Service() {
         // terminal Failed state.
         private val _launchState = MutableStateFlow<LaunchOutcome?>(null)
         val launchState: StateFlow<LaunchOutcome?> = _launchState
+
+        // Set by LaunchPreviewScreen once its AndroidExternalSurface exists,
+        // read by GameLaunchOrchestrator right after its own existing
+        // preloadPojavexecForAndroidVm() call. Deliberately not a second
+        // preload-and-handoff call site of its own - calling ensureNatives()
+        // a second time from a separate AndroidLwjglProvider instance while
+        // the first copy was still mapped is what caused the JNI_OnLoad
+        // SIGSEGV on the embedded JVM's own later load of the same library.
+        @Volatile
+        var pendingSurface: Surface? = null
 
         fun clearLaunchState() {
             _launchState.value = null
