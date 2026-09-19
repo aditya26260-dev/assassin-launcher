@@ -235,7 +235,8 @@ class GameLaunchOrchestrator(private val context: Context) {
             jliLibraryPath = File(runtimeRoot, "lib/libjli.so").absolutePath,
             args = fullArgs.toTypedArray(),
             fullVersion = fullVersion,
-            dotVersion = dotVersion
+            dotVersion = dotVersion,
+            nativeLibraryDir = context.applicationInfo.nativeLibraryDir
         )
         // A normal return here (rather than the whole process ending, per
         // launchEmbeddedJvm's doc comment) means JLI_Launch bailed out

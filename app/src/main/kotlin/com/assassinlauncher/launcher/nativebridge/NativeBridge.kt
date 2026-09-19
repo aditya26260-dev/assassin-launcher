@@ -85,6 +85,7 @@ object NativeBridge {
         jliLibraryPath: String,
         args: Array<String>,
         fullVersion: String,
-        dotVersion: String
+        dotVersion: String,
+        nativeLibraryDir: String
     ): Int
 }

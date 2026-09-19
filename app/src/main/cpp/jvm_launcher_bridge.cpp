@@ -128,7 +128,8 @@ extern "C" JNIEXPORT jint JNICALL
 Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
         JNIEnv *env, jobject /* this */,
         jstring jliLibraryPathJ, jobjectArray argsJ,
-        jstring fullVersionJ, jstring dotVersionJ) {
+        jstring fullVersionJ, jstring dotVersionJ,
+        jstring nativeLibraryDirJ) {
 
     const char *jliLibraryPath = env->GetStringUTFChars(jliLibraryPathJ, nullptr);
     std::string jliLibraryPathStr(jliLibraryPath); // copied before release; needed below for LD_LIBRARY_PATH
@@ -189,6 +190,24 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
     } else {
         LOGE("Could not derive lib directory from jliLibraryPath: %s", jliLibraryPathStr.c_str());
     }
+
+    // Confirmed via strings on our own vendored libpojavexec.so: pojavInit
+    // (called from glfwInit(), on the embedded JVM's own render thread)
+    // reads this with getenv() and, per the actual crash - SIGSEGV inside
+    // __strcmp_aarch64, called from pojavInit+0xa4, X0 (strcmp's first
+    // arg) null - passes the unchecked result straight into strcmp. This
+    // isn't Amethyst-specific plumbing on their side; it's this same
+    // vendored library expecting the same variable regardless of who's
+    // hosting it, unconditionally in Amethyst's own JREUtils.java (unlike
+    // the handful of other POJAV_* variables in the same strings dump,
+    // which are only set there for specific devices/renderers). The value
+    // itself is just this app's own native library directory -
+    // Context.getApplicationInfo().nativeLibraryDir, computed in Kotlin
+    // and passed down as nativeLibraryDirJ, no reason to re-derive it here.
+    const char *nativeLibraryDir = env->GetStringUTFChars(nativeLibraryDirJ, nullptr);
+    setenv("POJAV_NATIVEDIR", nativeLibraryDir, 1);
+    LOGI("Set POJAV_NATIVEDIR to %s", nativeLibraryDir);
+    env->ReleaseStringUTFChars(nativeLibraryDirJ, nativeLibraryDir);
 
     auto jliLaunch = reinterpret_cast<JLI_Launch_t>(dlsym(jliHandle, "JLI_Launch"));
     if (jliLaunch == nullptr) {
