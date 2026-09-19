@@ -305,6 +305,31 @@ class GameLaunchOrchestrator(private val context: Context) {
                 ?: variants.firstOrNull()
         }
 
+        // Disassembled pojavInitOpenGL (objdump, following the same
+        // strcmp(getenv(...), ...) crash pattern documented for
+        // FORCE_VSYNC in jvm_launcher_bridge.cpp): right after the
+        // FORCE_VSYNC check it does getenv("AMETHYST_RENDERER"), then
+        // strncmp(that, "opengles", 8) and, if that doesn't match,
+        // strcmp(that, "vulkan_zink") - also with no null check, same
+        // crash if this project doesn't set it either. The two literal
+        // strings are the only values the native side distinguishes
+        // between; every render path here is fundamentally one or the
+        // other from its perspective, unrecognized-string handling is a
+        // separate native error path, not something to route into.
+        Os.setenv(
+            "AMETHYST_RENDERER",
+            when (renderPath) {
+                is RenderPath.ZinkOverTurnip,
+                is RenderPath.VulkanViaTurnip,
+                is RenderPath.VulkanViaPanfrost,
+                is RenderPath.SystemVulkan -> "vulkan_zink"
+                is RenderPath.MobileGlues,
+                is RenderPath.KryptonWrapper,
+                is RenderPath.BaseGl4es -> "opengles"
+            },
+            true
+        )
+
         when (renderPath) {
             is RenderPath.MobileGlues -> {
                 // LIBGL_ES has to be set before tryLoad() below, not after -

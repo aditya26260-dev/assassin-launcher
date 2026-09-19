@@ -209,6 +209,22 @@ Java_com_assassinlauncher_launcher_nativebridge_NativeBridge_launchEmbeddedJvm(
     LOGI("Set POJAV_NATIVEDIR to %s", nativeLibraryDir);
     env->ReleaseStringUTFChars(nativeLibraryDirJ, nativeLibraryDir);
 
+    // POJAV_NATIVEDIR above did not fix the strcmp SIGSEGV it was meant to
+    // fix - disassembled pojavInitOpenGL directly this time (objdump, not
+    // strings/guessing) rather than get a third crash from another wrong
+    // guess. pojavInit's own body never calls getenv; it calls
+    // pojavInitOpenGL, which does, at its very first instruction:
+    // strcmp(getenv("FORCE_VSYNC"), "true"), no null check. Confirmed the
+    // exact string literals at those two addresses in the .so directly.
+    // Amethyst's real JREUtils.java always sets this, to
+    // String.valueOf(a boolean preference) - never unset either way, so
+    // the actual value passed doesn't matter for the crash, just that
+    // it's set to something. This project has no matching vsync
+    // preference yet, so hardcoding "false" rather than adding one for a
+    // single env var.
+    setenv("FORCE_VSYNC", "false", 1);
+    LOGI("Set FORCE_VSYNC to false");
+
     auto jliLaunch = reinterpret_cast<JLI_Launch_t>(dlsym(jliHandle, "JLI_Launch"));
     if (jliLaunch == nullptr) {
         LOGE("JLI_Launch symbol not found: %s", dlerror());
